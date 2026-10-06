@@ -1,0 +1,26 @@
+[package]
+name = "server"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "searchd"
+path = "src/main.rs"
+
+[dependencies]
+search_core = { path = "../core" }
+sources = { path = "../sources" }
+ranking = { path = "../ranking" }
+auth = { path = "../auth" }
+ai = { path = "../ai" }
+axum.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tower.workspace = true
+async-trait = "0.1"
+anyhow = "1"

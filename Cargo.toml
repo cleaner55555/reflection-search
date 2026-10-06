@@ -1,0 +1,29 @@
+[workspace]
+resolver = "2"
+members = ["core", "sources", "ranking", "server", "crawler", "index", "auth", "ai"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+async-trait = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+tower = { version = "0.4", features = ["util"] }
+scraper = "0.22"
+url = "2"
+tantivy = "0.22"
+argon2 = "0.5"
+jsonwebtoken = "9"
+rusqlite = { version = "0.31", features = ["bundled"] }
+chrono = "0.4"
+rand = "0.8"

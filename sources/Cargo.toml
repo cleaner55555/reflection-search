@@ -1,0 +1,15 @@
+[package]
+name = "sources"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+search_core = { path = "../core" }
+index = { path = "../index" }
+anyhow.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

@@ -1,0 +1,4 @@
+[tarpaulin]
+out = ["Stdout"]
+fail-under = 80
+exclude-files = ["**/tests/**"]
