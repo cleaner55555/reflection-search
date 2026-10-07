@@ -4,6 +4,28 @@ export const name = 'reflection-search';
 export const inject = ['tools'];
 
 const SERVER = (process.env.REFLECTION_SEARCH_URL || 'http://127.0.0.1:3000').replace(/\/$/, '');
+const TOKEN = (process.env.REFLECTION_SEARCH_TOKEN || '').trim();
+
+function authHeaders() {
+  return TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {};
+}
+
+async function postJson(path, body) {
+  const res = await fetch(SERVER + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401)
+    return 'Reflection AI needs login: set REFLECTION_SEARCH_TOKEN from your account (AI is prepaid).';
+  if (res.status === 402)
+    return 'Out of AI credits: top up at your Reflection Search account, then retry.';
+  if (res.status === 503)
+    return 'Reflection AI is disabled on this server.';
+  if (!res.ok) return 'Reflection AI failed with status ' + res.status + '.';
+  const j = await res.json();
+  return j.text || 'Empty answer.';
+}
 
 export function apply(ctx) {
   ctx.tools.register(
@@ -43,6 +65,48 @@ export function apply(ctx) {
           .slice(0, limit)
           .map((r, i) => (i + 1) + '. ' + r.title + '\n' + r.url + '\n' + (r.snippet || ''))
           .join('\n\n');
+      },
+    })
+  );
+
+  ctx.tools.register(
+    defineTool({
+      name: 'reflection_ask',
+      description:
+        'Ask a question answered ONLY from live Reflection Search results, with sources. Prepaid: needs REFLECTION_SEARCH_TOKEN with AI credits; every call bills the token owner at cost plus margin.',
+      parameters: {
+        query: { type: 'string', required: true, description: 'Search query for context' },
+        question: { type: 'string', required: true, description: 'Question to answer' },
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      async execute(args) {
+        const q = String(args.query || '').trim();
+        const question = String(args.question || '').trim();
+        if (!q || !question) return 'Empty query or question.';
+        return postJson('/ask', { query: q, question });
+      },
+    })
+  );
+
+  ctx.tools.register(
+    defineTool({
+      name: 'reflection_summarize',
+      description:
+        'Summarize live Reflection Search results for a query in 3-5 sentences. Prepaid: needs REFLECTION_SEARCH_TOKEN with AI credits; every call bills the token owner at cost plus margin.',
+      parameters: {
+        query: { type: 'string', required: true, description: 'Search query to summarize' },
+      },
+      output: {
+        schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value }],
+      },
+      async execute(args) {
+        const q = String(args.query || '').trim();
+        if (!q) return 'Empty query.';
+        return postJson('/summarize', { query: q });
       },
     })
   );

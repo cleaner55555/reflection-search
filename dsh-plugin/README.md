@@ -6,7 +6,13 @@ Topic za discoverability: `dsh-plugin`.
 ## Šta registruje
 
 - `reflection_search(query, limit?, columns?)` — gađa `GET /search` našeg `searchd`-a,
-  vraća numerisanu listu `naslov + url + snippet` sa citiranim izvorima.
+  vraća numerisanu listu `naslov + url + snippet` sa citiranim izvorima. Free, bez naloga.
+- `reflection_ask(query, question)` — odgovor iz živih rezultata (`POST /ask`).
+- `reflection_summarize(query)` — sažetak rezultata (`POST /summarize`).
+
+AI alati su prepaid: traže `REFLECTION_SEARCH_TOKEN` (token sa vašeg naloga)
+sa AI kreditima — svaki poziv skida `cost_usd` i nama ostaje marža.
+Bez tokena vraćaju uputstvo za login, bez kredita uputstvo za dopunu.
 
 ## Podešavanje
 
