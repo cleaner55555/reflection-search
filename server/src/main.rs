@@ -623,6 +623,7 @@ async fn security_headers(mut res: Response) -> Response {
         "strict-transport-security",
         HeaderValue::from_static("max-age=63072000; includeSubDomains"),
     );
+    h.insert("cache-control", HeaderValue::from_static("no-store"));
     res
 }
 
@@ -763,6 +764,21 @@ mod tests {
         assert_eq!(h["x-frame-options"], "DENY");
         assert!(h.contains_key("content-security-policy"));
         assert!(h.contains_key("strict-transport-security"));
+    }
+
+    #[tokio::test]
+    async fn frontend_has_no_external_requests() {
+        let res = router(test_state())
+            .oneshot(request("/"))
+            .await
+            .expect("oneshot");
+        let body = axum::body::to_bytes(res.into_body(), 65536)
+            .await
+            .expect("body");
+        let html = String::from_utf8_lossy(&body);
+        for attr in ["src=\"http", "href=\"http", "url(http", "@import"] {
+            assert!(!html.contains(attr), "eksterni zahtev u frontendu: {attr}");
+        }
     }
 
     #[tokio::test]

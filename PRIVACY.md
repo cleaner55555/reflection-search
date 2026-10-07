@@ -28,3 +28,6 @@
 ## Brisanje
 - Nalog: obrisati red iz `users.db` = sve nestaje (nema backup politike na prototipu).
 - Keševi: restart servera prazni sve.
+
+## Zavisnosti (cargo audit)
+- Čisto osim 1 tranzitivnog upozorenja: `lru 0.12.5` (kroz tantivy) — soundness rupa u `IterMut`, bez uticaja na naše korišćenje, fix čeka tantivy upgrade. Bez RCE/infoleak nalaza.
