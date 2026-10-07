@@ -19,10 +19,17 @@ use sources::{BraveSource, OpenAlexSource, OwnIndexSource, Source, WikipediaSour
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
+use tower_http::{
+    request_id::{MakeRequestId, PropagateRequestIdLayer, RequestId, SetRequestIdLayer},
+    trace::{DefaultOnResponse, TraceLayer},
+};
 
 /// Verzija servisa (iz workspace `Cargo.toml`).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -686,8 +693,26 @@ async fn security_headers(mut res: Response) -> Response {
     res
 }
 
+/// Brojač ID-jeva zahteva (po procesu, ne perzistira se — nije tracking).
+#[derive(Clone, Default)]
+struct RequestIdMaker {
+    counter: Arc<AtomicUsize>,
+}
+
+impl MakeRequestId for RequestIdMaker {
+    fn make_request_id<B>(&mut self, _req: &axum::http::Request<B>) -> Option<RequestId> {
+        self.counter
+            .fetch_add(1, Ordering::SeqCst)
+            .to_string()
+            .parse()
+            .ok()
+            .map(RequestId::new)
+    }
+}
+
 /// Sklapa ruter — izdvojeno radi testiranja bez mreže.
 pub fn router(state: AppState) -> Router {
+    let request_id = axum::http::HeaderName::from_static("x-request-id");
     Router::new()
         .route("/", get(index))
         .route("/health", get(health))
@@ -699,6 +724,28 @@ pub fn router(state: AppState) -> Router {
         .route_layer(middleware::from_fn(rate_limit))
         .layer(Extension(state.limiter.clone()))
         .layer(middleware::map_response(security_headers))
+        .layer(PropagateRequestIdLayer::new(request_id.clone()))
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|req: &axum::http::Request<axum::body::Body>| {
+                    let id = req
+                        .headers()
+                        .get("x-request-id")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("-");
+                    tracing::info_span!(
+                        "http",
+                        method = %req.method(),
+                        path = req.uri().path(),
+                        request_id = id,
+                    )
+                })
+                .on_response(DefaultOnResponse::new().level(tracing::Level::INFO)),
+        )
+        .layer(SetRequestIdLayer::new(
+            request_id,
+            RequestIdMaker::default(),
+        ))
         .with_state(state)
 }
 
@@ -838,6 +885,15 @@ mod tests {
         for attr in ["src=\"http", "href=\"http", "url(http", "@import"] {
             assert!(!html.contains(attr), "eksterni zahtev u frontendu: {attr}");
         }
+    }
+
+    #[tokio::test]
+    async fn request_id_propagated() {
+        let res = router(test_state())
+            .oneshot(request("/health"))
+            .await
+            .expect("oneshot");
+        assert!(res.headers().contains_key("x-request-id"));
     }
 
     #[tokio::test]

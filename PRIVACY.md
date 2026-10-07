@@ -22,8 +22,9 @@
 
 ## Mreža i hosting
 - `searchd` sluša HTTP na 127.0.0.1:3000 — za javno obavezan HTTPS reverse proxy (Caddy/nginx), inače provajder vidi sve.
-- Frontend: 0 eksternih zahteva (nema CDN, nema fontova, nema trackera).
-- Odgovori nose: CSP, HSTS, `nosniff`, `no-referrer`, `DENY` frame.
+- Frontend: 0 eksternih zahteva (nema CDN, fontova, trackera).
+- Odgovori nose: CSP, HSTS, `nosniff`, `no-referrer`, `DENY` frame, `no-store`, `x-request-id` (brojač po procesu, ne perzistira se).
+- Logovi: metod + putanja + latencija + request_id na INFO; bez tela upita, bez headera (nema tokena u logovima).
 
 ## Brisanje
 - Nalog: obrisati red iz `users.db` = sve nestaje (nema backup politike na prototipu).
