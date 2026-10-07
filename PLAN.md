@@ -71,7 +71,7 @@ Besplatan meta-pretraživač, engleski prvo, ostali jezici po potražnji. Podraz
 4. Svaka javna funkcija ima doc-komentar; svaki crate ima `README` ili modulsku dokumentaciju.
 5. Timeout na svaki mrežni poziv; retry max 1 sa backoffom; nikad blokirajuće u async.
 6. Tajne samo iz env; primer u `.env.example`; CI pada ako nađe tajnu (gitleaks ili grep).
-7. Svaki korak ima testove pre/uz kod; coverage gate 80% (tarpaulin, `fail-under = 80`). Izmereno: 85.04% (716/842).
+7. Svaki korak ima testove pre/uz kod; coverage gate 80% (tarpaulin, `fail-under = 80`). Izmereno: 84.62% (770/910).
 8. Commit poruke: `feat|fix|docs|test|refactor: ...`; svaki korak = 1+ commit + push.
 
 ## 11. Otvoreno

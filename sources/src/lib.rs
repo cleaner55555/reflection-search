@@ -4,10 +4,12 @@
 //! Izvor nikad ne ruši agregator — greška se loguje i vraća prazna lista.
 
 pub mod brave;
+pub mod openalex;
 pub mod own_index;
 pub mod wikipedia;
 
 pub use brave::BraveSource;
+pub use openalex::OpenAlexSource;
 pub use own_index::OwnIndexSource;
 pub use wikipedia::WikipediaSource;
 

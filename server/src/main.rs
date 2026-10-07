@@ -7,7 +7,7 @@ mod cache;
 
 use axum::{
     extract::{ConnectInfo, Query as AxumQuery, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Json, Response},
     routing::{get, post},
@@ -15,7 +15,7 @@ use axum::{
 };
 use search_core::{Query, SearchResult};
 use serde::{Deserialize, Serialize};
-use sources::{BraveSource, OwnIndexSource, Source, WikipediaSource};
+use sources::{BraveSource, OpenAlexSource, OwnIndexSource, Source, WikipediaSource};
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
@@ -61,11 +61,14 @@ pub struct CachedBody {
 }
 
 impl AppState {
-    /// Pravi stanje: Wikipedia uvek, Brave samo uz `BRAVE_API_KEY`.
+    /// Pravi stanje: Wikipedia + OpenAlex uvek, Brave samo uz `BRAVE_API_KEY`.
     /// Sopstveni indeks kreće prazan; puni ga crawler proces (faza 3).
     #[must_use]
     pub fn from_env() -> Self {
-        let mut sources: Vec<Arc<dyn Source>> = vec![Arc::new(WikipediaSource::new())];
+        let mut sources: Vec<Arc<dyn Source>> = vec![
+            Arc::new(WikipediaSource::new()),
+            Arc::new(OpenAlexSource::new()),
+        ];
         match OwnIndexSource::with_docs(&[]) {
             Ok(own) => sources.push(Arc::new(own)),
             Err(e) => tracing::error!(error = %e, "own-index disabled"),
@@ -234,6 +237,7 @@ fn template_for(intent: ranking::Intent, sources: &[String]) -> Vec<String> {
         ranking::Intent::News => &["all", "wikipedia"],
         ranking::Intent::Shopping => &["all"],
         ranking::Intent::Tech => &["all", "wikipedia"],
+        ranking::Intent::Academic => &["all", "openalex"],
         ranking::Intent::General => &["all"],
     };
     let mut out: Vec<String> = want
@@ -390,9 +394,9 @@ fn ai_response(answer: ai::AiAnswer, hit: bool) -> Response {
     res.headers_mut().insert(
         "x-cache",
         if hit {
-            "HIT".parse().expect("header")
+            HeaderValue::from_static("HIT")
         } else {
-            "MISS".parse().expect("header")
+            HeaderValue::from_static("MISS")
         },
     );
     res
@@ -533,9 +537,9 @@ fn cached_response(body: CachedBody, hit: bool) -> Response {
     res.headers_mut().insert(
         "x-cache",
         if hit {
-            "HIT".parse().expect("header")
+            HeaderValue::from_static("HIT")
         } else {
-            "MISS".parse().expect("header")
+            HeaderValue::from_static("MISS")
         },
     );
     res
@@ -546,17 +550,16 @@ const INDEX_HTML: &str = r#"<!doctype html>
 <html lang="en" class="dark"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reflection Search</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>main::-webkit-scrollbar{height:8px}main::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}.col{width:340px;min-width:340px;max-height:calc(100vh - 140px)}.dragging{opacity:.4}ul::-webkit-scrollbar{width:6px}ul::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}</style></head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-<header class="sticky top-0 z-10 bg-slate-900/95 border-b border-slate-800 px-4 py-3 flex flex-wrap gap-2 items-center">
-<h1 class="font-bold text-lg whitespace-nowrap">Reflection Search</h1>
-<form id="f" class="flex gap-2 flex-1 min-w-[200px] max-w-xl"><input id="q" class="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 outline-none focus:border-sky-500" placeholder="pretraga..." autofocus><button class="bg-sky-600 hover:bg-sky-500 rounded px-4 py-1.5 font-medium">Traži</button></form>
-<select id="src" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5"><option value="all">all</option><option value="brave">brave</option><option value="wikipedia">wikipedia</option><option value="own-index">own-index</option></select>
-<button id="add" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-3 py-1.5">+ Kolona</button>
+<style>*{box-sizing:border-box}body{margin:0;background:#020617;color:#f1f5f9;font-family:system-ui,sans-serif;min-height:100vh}header{position:sticky;top:0;z-index:10;background:rgba(15,23,42,.95);border-bottom:1px solid #1e293b;padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}h1{font-size:18px;font-weight:700;margin:0 8px 0 0;white-space:nowrap}form#f{display:flex;gap:8px;flex:1;min-width:200px;max-width:640px}input,select{background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:7px 12px;outline:none}input:focus{border-color:#0284c7}button{background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:7px 12px;cursor:pointer}button:hover{background:#334155}button.primary{background:#0284c7;border-color:#0284c7;font-weight:600}button.primary:hover{background:#0ea5e9}#ad{padding:8px 16px 0}main{display:flex;gap:12px;overflow-x:auto;padding:16px;align-items:flex-start}main::-webkit-scrollbar,ul::-webkit-scrollbar{height:8px;width:6px}main::-webkit-scrollbar-thumb,ul::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}.col{width:340px;min-width:340px;max-height:calc(100vh - 140px);background:#0f172a;border:1px solid #1e293b;border-radius:8px;display:flex;flex-direction:column;overflow:hidden}.colhead{padding:8px 12px;background:rgba(30,41,59,.7);border-bottom:1px solid #334155;display:flex;align-items:center;gap:8px;cursor:move}.colhead h2{font-size:15px;margin:0;flex:1}.grip,.x{color:#64748b;background:none;border:none;padding:0 4px}.x:hover{color:#f87171}.col ul{overflow-y:auto;padding:8px;margin:0;list-style:none;display:flex;flex-direction:column;gap:8px}.card{background:rgba(30,41,59,.6);border-radius:6px;padding:8px}.card:hover{background:#1e293b}.card a{color:#38bdf8;font-size:13px;font-weight:600;text-decoration:none}.card a:hover{text-decoration:underline}.card p{color:#94a3b8;font-size:12px;margin:4px 0}.card span{color:#475569;font-size:11px}.empty{color:#475569;font-size:13px;padding:0 4px}aside{border:1px dashed #475569;border-radius:6px;padding:8px;font-size:12px;color:#94a3b8}.dragging{opacity:.4}</style></head>
+<body>
+<header>
+<h1>Reflection Search</h1>
+<form id="f"><input id="q" style="flex:1" placeholder="pretraga..." autofocus><button class="primary">Traži</button></form>
+<select id="src"><option value="all">all</option><option value="brave">brave</option><option value="wikipedia">wikipedia</option><option value="openalex">openalex</option><option value="own-index">own-index</option></select>
+<button id="add">+ Kolona</button>
 </header>
-<div id="ad" class="px-4 pt-2"></div>
-<main id="cols" class="flex gap-3 overflow-x-auto p-4 items-start"></main>
+<div id="ad"></div>
+<main id="cols"></main>
 <script>
 let cols=[];try{cols=JSON.parse(localStorage.getItem('rs-cols')||'["all"]')}catch(e){cols=['all']}
 function save(){try{localStorage.setItem('rs-cols',JSON.stringify(cols))}catch(e){}}
@@ -565,9 +568,9 @@ function render(){
 const m=document.getElementById('cols');m.innerHTML='';
 cols.forEach((c,i)=>{
 const d=document.createElement('section');
-d.className='col bg-slate-900 border border-slate-800 rounded-lg flex flex-col overflow-hidden';
+d.className='col';
 d.draggable=true;d.dataset.i=i;
-d.innerHTML='<div class="px-3 py-2 bg-slate-800/70 border-b border-slate-700 flex items-center gap-2 cursor-move"><span class="text-slate-500">++</span><h2 class="font-semibold flex-1">'+esc(c)+'</h2><button class="text-slate-500 hover:text-red-400 px-1" data-x="'+i+'">x</button></div><ul class="overflow-y-auto p-2 space-y-2" id="col-'+i+'"><li class="text-slate-500 text-sm px-1">-</li></ul>';
+d.innerHTML='<div class="colhead"><span class="grip">++</span><h2>'+esc(c)+'</h2><button class="x" data-x="'+i+'">x</button></div><ul id="col-'+i+'"><li class="empty">-</li></ul>';
 m.appendChild(d);
 });
 m.querySelectorAll('[data-x]').forEach(b=>{b.onclick=()=>{cols.splice(+b.dataset.x,1);if(!cols.length)cols=['all'];save();render();search()}});
@@ -578,16 +581,16 @@ s.ondragover=e=>e.preventDefault();
 s.ondrop=e=>{e.preventDefault();const from=+e.dataTransfer.getData('text/plain');const to=+s.dataset.i;if(from===to)return;const mv=cols.splice(from,1);cols.splice(to,0,mv[0]);save();render();search()};
 });
 }
-function item(x){return '<li class="bg-slate-800/60 hover:bg-slate-800 rounded p-2"><a class="text-sky-400 hover:underline text-sm font-medium" href="'+esc(x.url)+'">'+esc(x.title)+'</a><p class="text-slate-400 text-xs mt-1">'+esc(x.snippet||'')+'</p><span class="text-slate-600 text-xs">['+esc(x.source)+']</span></li>'}
+function item(x){return '<li class="card"><a href="'+esc(x.url)+'">'+esc(x.title)+'</a><p>'+esc(x.snippet||'')+'</p><span>['+esc(x.source)+']</span></li>'}
 async function search(){
 const qv=document.getElementById('q').value.trim();if(!qv)return;
 const res=await fetch('/search?limit=10&q='+encodeURIComponent(qv)+'&columns='+encodeURIComponent(cols.join(',')));
 const j=await res.json();
-document.getElementById('ad').innerHTML=j.sponsored?'<aside class="border border-dashed border-slate-600 rounded p-2 text-xs text-slate-400">Sponsored: <a class="text-sky-400" href="'+esc(j.sponsored.url)+'">'+esc(j.sponsored.title)+'</a></aside>':'';
+document.getElementById('ad').innerHTML=j.sponsored?'<aside>Sponsored: <a href="'+esc(j.sponsored.url)+'">'+esc(j.sponsored.title)+'</a></aside>':'';
 cols.forEach((c,i)=>{
 const ul=document.getElementById('col-'+i);if(!ul)return;
 const rows=(j.columns&&j.columns[c])||[];
-ul.innerHTML=rows.length?rows.map(item).join(''):'<li class="text-slate-600 text-sm px-1">nema rezultata</li>';
+ul.innerHTML=rows.length?rows.map(item).join(''):'<li class="empty">nema rezultata</li>';
 });
 }
 document.getElementById('f').onsubmit=e=>{e.preventDefault();search()};
@@ -598,6 +601,29 @@ render();
 
 async fn index() -> Html<&'static str> {
     Html(INDEX_HTML)
+}
+
+/// Sigurnosni headeri na svaki odgovor. CSP je labav za inline
+/// script/style jer je frontend inline; stroži kad se izdvoji u fajl.
+async fn security_headers(mut res: Response) -> Response {
+    let h = res.headers_mut();
+    h.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    h.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    h.insert("x-frame-options", HeaderValue::from_static("DENY"));
+    h.insert(
+        "content-security-policy",
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'",
+        ),
+    );
+    h.insert(
+        "strict-transport-security",
+        HeaderValue::from_static("max-age=63072000; includeSubDomains"),
+    );
+    res
 }
 
 /// Sklapa ruter — izdvojeno radi testiranja bez mreže.
@@ -612,6 +638,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ask", post(ask))
         .route_layer(middleware::from_fn(rate_limit))
         .layer(Extension(state.limiter.clone()))
+        .layer(middleware::map_response(security_headers))
         .with_state(state)
 }
 
@@ -722,6 +749,20 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
         assert_eq!(json["status"], "ok");
         assert_eq!(json["version"], VERSION);
+    }
+
+    #[tokio::test]
+    async fn security_headers_present() {
+        let res = router(test_state())
+            .oneshot(request("/health"))
+            .await
+            .expect("oneshot");
+        let h = res.headers();
+        assert_eq!(h["x-content-type-options"], "nosniff");
+        assert_eq!(h["referrer-policy"], "no-referrer");
+        assert_eq!(h["x-frame-options"], "DENY");
+        assert!(h.contains_key("content-security-policy"));
+        assert!(h.contains_key("strict-transport-security"));
     }
 
     #[tokio::test]

@@ -12,6 +12,8 @@ pub enum Intent {
     Shopping,
     /// Tehnologija: kolone dokumentacija + kod + forum.
     Tech,
+    /// Akademsko: kolone radovi + citiranost.
+    Academic,
     /// Opšte: standardne kolone.
     General,
 }
@@ -61,7 +63,23 @@ pub fn detect(query: &str) -> Intent {
         "javascript",
         "typescript",
     ]);
-    if shopping >= 2 && shopping >= news && shopping >= tech {
+    let academic = hits(&[
+        " paper ",
+        " study ",
+        "studies",
+        " research ",
+        "arxiv",
+        " doi ",
+        " journal ",
+        " published ",
+        "citation",
+        " thesis ",
+        " peer review",
+        " dataset ",
+    ]);
+    if academic >= 1 && academic * 2 >= shopping && academic >= news && academic >= tech {
+        Intent::Academic
+    } else if shopping >= 2 && shopping >= news && shopping >= tech {
         Intent::Shopping
     } else if news >= 1 && news >= tech {
         Intent::News
@@ -119,6 +137,9 @@ mod tests {
             ("api error handling", Intent::Tech),
             ("cheap hotels deal", Intent::Shopping),
             ("latest python release", Intent::News),
+            ("deep learning paper", Intent::Academic),
+            ("arxiv transformer study", Intent::Academic),
+            ("peer reviewed research", Intent::Academic),
         ];
         let mut hits = 0;
         for (q, want) in cases {
