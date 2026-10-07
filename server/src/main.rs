@@ -62,14 +62,18 @@ pub struct CachedBody {
 
 impl AppState {
     /// Pravi stanje: Wikipedia + OpenAlex uvek, Brave samo uz `BRAVE_API_KEY`.
-    /// Sopstveni indeks kreće prazan; puni ga crawler proces (faza 3).
+    /// Sopstveni indeks: sa diska uz `INDEX_DIR`, inače kreće prazan.
     #[must_use]
     pub fn from_env() -> Self {
         let mut sources: Vec<Arc<dyn Source>> = vec![
             Arc::new(WikipediaSource::new()),
             Arc::new(OpenAlexSource::new()),
         ];
-        match OwnIndexSource::with_docs(&[]) {
+        let own = match std::env::var("INDEX_DIR") {
+            Ok(dir) => OwnIndexSource::open_dir(std::path::Path::new(&dir)),
+            Err(_) => OwnIndexSource::with_docs(&[]),
+        };
+        match own {
             Ok(own) => sources.push(Arc::new(own)),
             Err(e) => tracing::error!(error = %e, "own-index disabled"),
         }

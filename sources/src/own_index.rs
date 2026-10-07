@@ -23,6 +23,14 @@ impl OwnIndexSource {
             index: Mutex::new(index),
         })
     }
+
+    /// Otvara (ili pravi) indeks na disku.
+    pub fn open_dir(path: &std::path::Path) -> anyhow::Result<Self> {
+        let index = SearchIndex::open_dir(path).map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(Self {
+            index: Mutex::new(index),
+        })
+    }
 }
 
 #[async_trait]
@@ -81,5 +89,26 @@ mod tests {
             .await
             .expect("search");
         assert!(out.is_empty());
+    }
+
+    #[tokio::test]
+    async fn open_dir_seeded_and_found() {
+        let dir = std::env::temp_dir().join(format!("rs-src-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut idx = index::SearchIndex::open_dir(&dir).expect("create");
+        idx.add(&[Doc {
+            title: "Guide".into(),
+            body: "systems tutorial".into(),
+            url: "https://x.com/1".into(),
+        }])
+        .expect("add");
+        drop(idx);
+        let src = OwnIndexSource::open_dir(&dir).expect("open");
+        let out = src
+            .search(&Query::new("systems tutorial").expect("q"))
+            .await
+            .expect("search");
+        assert_eq!(out.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

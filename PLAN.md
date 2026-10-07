@@ -53,7 +53,14 @@ Besplatan meta-pretraživač, engleski prvo, ostali jezici po potražnji. Podraz
 - [x] **3.2 Crawler** — Gotovo: robots.txt (naš UA + *), pauza po domenu, UA sa kontaktom, kap 5MB, ekstrakcija (title/tekst/linkovi, bez script/style). Test: 100 strana sa stuba, robots zabrana poštovana.
 - [x] **3.3 Tantivy indeks** — Gotovo: schema title/body/url, 1000 dokumenata, p95 <100ms, testovi zeleni.
 - [x] **3.4 `OwnIndex` kao izvor** — Gotovo: `own-index` izvor u agregatoru i kolonama (kreće prazan), e2e testovi + živ curl.
-- [ ] **3.5 Perzistencija + seed** — indeks na disk, seed proces (crawler → indeks). Tek kad ima šta da se indeksira.
+- [x] **3.5 Perzistencija + seed** — Gotovo: `SearchIndex::open_dir` (MmapDirectory open-or-create), `OwnIndexSource::open_dir`, `seed` bin (`SEED_URLS` → `INDEX_DIR`), server čita `INDEX_DIR`. Test: roundtrip add→reopen→search.
+- [x] **3.6 Tantivy 0.22→0.26 upgrade** — Gotovo: `TopDocs::order_by_score`, `CompactDocValue` konverzija, `get_field` Result; stari `lru` soundness nalaz nestao iz audita.
+
+## 12. Roadmap iz GitHub istraživanja (nakon 3.6)
+1. **3.5 kraj**: `open_dir` (open-or-create) + `seed` bin + server čita `INDEX_DIR`.
+2. **spider-rs procena**: spike da li menja naš crawler (JS render) — zamena samo ako zatreba JS-heavy sajtovi.
+3. **Perplexica focus lensovi**: academic lens gotov (OpenAlex); discussions/calc lensovi kad dobiju izvor bez ključa.
+4. **Stract čitanje**: ranking ideje (optics filteri) — istraživanje, ne kod.
 
 ## 8. Koraci — FAZA 4: Prihod (posle trakcije, ne pre)
 - [x] **4.1 Nalozi** — Gotovo: argon2id + JWT (30d), dnevna kvota 1000, Bearer na /search, 49/49 testova + živ curl (201/200/401).
@@ -71,7 +78,7 @@ Besplatan meta-pretraživač, engleski prvo, ostali jezici po potražnji. Podraz
 4. Svaka javna funkcija ima doc-komentar; svaki crate ima `README` ili modulsku dokumentaciju.
 5. Timeout na svaki mrežni poziv; retry max 1 sa backoffom; nikad blokirajuće u async.
 6. Tajne samo iz env; primer u `.env.example`; CI pada ako nađe tajnu (gitleaks ili grep).
-7. Svaki korak ima testove pre/uz kod; coverage gate 80% (tarpaulin, `fail-under = 80`). Izmereno: 84.62% (770/910).
+7. Svaki korak ima testove pre/uz kod; coverage gate 80% (tarpaulin, `fail-under = 80`). Izmereno: 81.32% (862/1060).
 8. Commit poruke: `feat|fix|docs|test|refactor: ...`; svaki korak = 1+ commit + push.
 
 ## 11. Otvoreno

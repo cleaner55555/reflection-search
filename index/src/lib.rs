@@ -5,6 +5,7 @@
 
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
+use tantivy::schema::document::CompactDocValue;
 use tantivy::schema::{
     IndexRecordOption, OwnedValue, Schema, TextFieldIndexing, TextOptions, STORED, TEXT,
 };
@@ -72,17 +73,31 @@ fn schema() -> (
 impl SearchIndex {
     /// Pravi prazan in-memory indeks.
     pub fn open() -> Result<Self, IndexError> {
-        let (schema, title, body, url) = schema();
-        let index = Index::create_in_ram(schema);
+        let (schema, _, _, _) = schema();
+        Self::from_index(Index::create_in_ram(schema))
+    }
+
+    /// Otvara indeks sa diska, ili ga pravi ako ne postoji.
+    pub fn open_dir(path: &std::path::Path) -> Result<Self, IndexError> {
+        std::fs::create_dir_all(path).map_err(|_| IndexError::Tantivy)?;
+        let (schema, _, _, _) = schema();
+        let dir = tantivy::directory::MmapDirectory::open(path).map_err(|_| IndexError::Tantivy)?;
+        let index = Index::open_or_create(dir, schema).map_err(|_| IndexError::Tantivy)?;
+        Self::from_index(index)
+    }
+
+    fn from_index(index: Index) -> Result<Self, IndexError> {
+        let s = index.schema();
+        let field = |name: &str| s.get_field(name).map_err(|_| IndexError::Tantivy);
         let reader = index.reader().map_err(|_| IndexError::Tantivy)?;
         let writer = index.writer(50_000_000).map_err(|_| IndexError::Tantivy)?;
         Ok(Self {
             index,
             reader,
             writer,
-            title,
-            body,
-            url,
+            title: field("title")?,
+            body: field("body")?,
+            url: field("url")?,
         })
     }
 
@@ -108,7 +123,7 @@ impl SearchIndex {
         let parser = QueryParser::for_index(&self.index, vec![self.title, self.body]);
         let parsed = parser.parse_query(query).map_err(|_| IndexError::Tantivy)?;
         let top = searcher
-            .search(&parsed, &TopDocs::with_limit(TOP_N))
+            .search(&parsed, &TopDocs::with_limit(TOP_N).order_by_score())
             .map_err(|_| IndexError::Tantivy)?;
         let mut hits = Vec::new();
         for (score, addr) in top {
@@ -124,9 +139,9 @@ impl SearchIndex {
     }
 }
 
-fn text_of(value: Option<&OwnedValue>) -> String {
-    match value {
-        Some(OwnedValue::Str(s)) => s.clone(),
+fn text_of(value: Option<CompactDocValue<'_>>) -> String {
+    match value.map(OwnedValue::from) {
+        Some(OwnedValue::Str(s)) => s,
         _ => String::new(),
     }
 }
@@ -154,6 +169,19 @@ mod tests {
         idx.add(&docs(100)).expect("add");
         let hits = idx.search("w42").expect("search");
         assert!(hits.iter().any(|h| h.url == "https://example.com/42"));
+    }
+
+    #[test]
+    fn open_dir_roundtrip() {
+        let dir = std::env::temp_dir().join(format!("rs-idx-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut idx = SearchIndex::open_dir(&dir).expect("create");
+        idx.add(&docs(10)).expect("add");
+        drop(idx);
+        let idx2 = SearchIndex::open_dir(&dir).expect("reopen");
+        let hits = idx2.search("w3").expect("search");
+        assert!(hits.iter().any(|h| h.url == "https://example.com/3"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
