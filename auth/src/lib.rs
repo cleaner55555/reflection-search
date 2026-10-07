@@ -35,6 +35,9 @@ pub enum AuthError {
     /// Kvota potrošena.
     #[error("daily quota exceeded")]
     Quota,
+    /// Nema dovoljno kredita za AI poziv (402).
+    #[error("insufficient credits")]
+    NoCredits,
     /// Neispravan/istekao token.
     #[error("invalid token")]
     BadToken,
@@ -74,6 +77,15 @@ impl UserStore {
                PRIMARY KEY (user_id, day));",
         )
         .map_err(|_| AuthError::Storage)?;
+        // Migracija: krediti za AI (prepaid). Postojeće baze dobijaju kolonu sa 0.
+        if let Err(e) = db.execute(
+            "ALTER TABLE users ADD COLUMN credits REAL NOT NULL DEFAULT 0",
+            [],
+        ) {
+            if !e.to_string().contains("duplicate column") {
+                return Err(AuthError::Storage);
+            }
+        }
         Ok(Self {
             db: Arc::new(Mutex::new(db)),
             enc: Arc::new(EncodingKey::from_secret(jwt_secret)),

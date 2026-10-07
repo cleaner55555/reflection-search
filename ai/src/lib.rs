@@ -28,6 +28,66 @@ pub const MAX_CONTEXT_CHARS: usize = 6000;
 pub const DEFAULT_PRICE_IN_PER_M: f64 = 0.15;
 /// Podrazumevana cena izlaza ($/1M tokena) — procena, proveriti cenovnik.
 pub const DEFAULT_PRICE_OUT_PER_M: f64 = 0.60;
+/// DeepSeek baza (OpenAI-kompatibilan `/v1/chat/completions`).
+pub const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com";
+/// DeepSeek cena ulaza, peak konzervativno ($/1M) — proveriti cenovnik.
+pub const DEEPSEEK_PRICE_IN_PER_M: f64 = 0.30;
+/// DeepSeek cena izlaza, peak konzervativno ($/1M) — proveriti cenovnik.
+pub const DEEPSEEK_PRICE_OUT_PER_M: f64 = 1.20;
+
+/// Provajder LLM API-ja — svi su OpenAI-kompatibilni, menja se jednom env var.
+/// Eksplicitne `AI_BASE_URL` / `AI_MODEL` / `LLM_PRICE_*` uvek pobeđuju preset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provider {
+    /// OpenAI (default): baza + model + cene iz defaulta.
+    OpenAi,
+    /// DeepSeek: baza + cene iz preseta, model OBAVEZNO iz `AI_MODEL`
+    /// (legacy `deepseek-chat` je penzionisan — proveriti aktuelni id u docs).
+    DeepSeek,
+}
+
+impl Provider {
+    /// Čita `AI_PROVIDER` (default `openai`); nepoznato pada na OpenAi.
+    #[must_use]
+    pub fn from_env_name() -> Self {
+        match std::env::var("AI_PROVIDER")
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase()
+            .as_str()
+        {
+            "deepseek" => Self::DeepSeek,
+            _ => Self::OpenAi,
+        }
+    }
+
+    /// Sklapa (baza, model, cena_in, cena_out); `None` kad fali obavezan model.
+    #[must_use]
+    pub fn resolve(
+        self,
+        base: Option<String>,
+        model: Option<String>,
+        price_in: Option<f64>,
+        price_out: Option<f64>,
+    ) -> Option<(String, String, f64, f64)> {
+        let base = base.filter(|s| !s.trim().is_empty());
+        let model = model.filter(|s| !s.trim().is_empty());
+        match self {
+            Self::OpenAi => Some((
+                base.unwrap_or_else(|| DEFAULT_BASE_URL.to_string()),
+                model.unwrap_or_else(|| DEFAULT_MODEL.to_string()),
+                price_in.unwrap_or(DEFAULT_PRICE_IN_PER_M),
+                price_out.unwrap_or(DEFAULT_PRICE_OUT_PER_M),
+            )),
+            Self::DeepSeek => Some((
+                base.unwrap_or_else(|| DEEPSEEK_BASE_URL.to_string()),
+                model?,
+                price_in.unwrap_or(DEEPSEEK_PRICE_IN_PER_M),
+                price_out.unwrap_or(DEEPSEEK_PRICE_OUT_PER_M),
+            )),
+        }
+    }
+}
 
 /// Greške AI sloja — mapiraju se u HTTP statuse na API granici.
 #[derive(Debug, thiserror::Error)]
@@ -81,17 +141,30 @@ pub struct AiClient {
 
 impl AiClient {
     /// Pravi klijent iz env (`AI_API_KEY` obavezan; ostalo ima default).
-    /// `None` znači ugašen AI sloj.
+    /// Provajder iz `AI_PROVIDER` (`openai`/`deepseek`); `None` znači ugašen AI.
+    /// DeepSeek bez eksplicitnog `AI_MODEL` takođe daje `None` + warn u serveru.
     #[must_use]
     pub fn from_env() -> Option<Self> {
         let api_key = std::env::var("AI_API_KEY")
             .ok()
             .filter(|k| !k.trim().is_empty())?;
-        Some(Self::new(
+        let provider = Provider::from_env_name();
+        let non_empty = |name: &str| std::env::var(name).ok().filter(|s| !s.trim().is_empty());
+        let price = |name: &str| non_empty(name).and_then(|s| s.parse::<f64>().ok());
+        let (base_url, model, price_in_per_m, price_out_per_m) = provider.resolve(
+            non_empty("AI_BASE_URL"),
+            non_empty("AI_MODEL"),
+            price("LLM_PRICE_IN_PER_M"),
+            price("LLM_PRICE_OUT_PER_M"),
+        )?;
+        Some(Self {
+            client: reqwest::Client::new(),
             api_key,
-            std::env::var("AI_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string()),
-            std::env::var("AI_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string()),
-        ))
+            base_url,
+            model,
+            price_in_per_m,
+            price_out_per_m,
+        })
     }
 
     /// Pravi klijent sa eksplicitnim parametrima (testovi koriste stub).
@@ -355,5 +428,44 @@ mod tests {
         assert_eq!(approx_tokens(""), 1);
         assert_eq!(approx_tokens("abcd"), 1);
         assert_eq!(approx_tokens("abcde"), 2);
+    }
+
+    #[test]
+    fn provider_openai_defaults() {
+        let (base, model, pi, po) = Provider::OpenAi
+            .resolve(None, None, None, None)
+            .expect("resolve");
+        assert_eq!(base, DEFAULT_BASE_URL);
+        assert_eq!(model, DEFAULT_MODEL);
+        assert!((pi - DEFAULT_PRICE_IN_PER_M).abs() < f64::EPSILON);
+        assert!((po - DEFAULT_PRICE_OUT_PER_M).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn provider_deepseek_needs_explicit_model() {
+        assert!(Provider::DeepSeek.resolve(None, None, None, None).is_none());
+        let (base, model, pi, po) = Provider::DeepSeek
+            .resolve(None, Some("deepseek-test".into()), None, None)
+            .expect("resolve");
+        assert_eq!(base, DEEPSEEK_BASE_URL);
+        assert_eq!(model, "deepseek-test");
+        assert!((pi - DEEPSEEK_PRICE_IN_PER_M).abs() < f64::EPSILON);
+        assert!((po - DEEPSEEK_PRICE_OUT_PER_M).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn provider_explicit_overrides_win() {
+        let (base, model, pi, po) = Provider::DeepSeek
+            .resolve(
+                Some("https://proxy.local/v1".into()),
+                Some("m".into()),
+                Some(1.0),
+                Some(2.0),
+            )
+            .expect("resolve");
+        assert_eq!(base, "https://proxy.local/v1");
+        assert_eq!(model, "m");
+        assert!((pi - 1.0).abs() < f64::EPSILON);
+        assert!((po - 2.0).abs() < f64::EPSILON);
     }
 }

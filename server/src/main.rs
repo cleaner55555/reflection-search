@@ -314,6 +314,7 @@ fn auth_error(e: auth::AuthError) -> (StatusCode, String) {
         E::Taken => (StatusCode::CONFLICT, e.to_string()),
         E::BadInput => (StatusCode::BAD_REQUEST, e.to_string()),
         E::Quota => (StatusCode::TOO_MANY_REQUESTS, e.to_string()),
+        E::NoCredits => (StatusCode::PAYMENT_REQUIRED, e.to_string()),
         E::BadToken => (StatusCode::UNAUTHORIZED, e.to_string()),
         E::Storage => (
             StatusCode::INTERNAL_SERVER_ERROR,
