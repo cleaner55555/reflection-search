@@ -5,6 +5,7 @@
 mod ads;
 mod billing;
 mod cache;
+mod pages;
 
 use axum::{
     extract::{ConnectInfo, Query as AxumQuery, State},
@@ -732,6 +733,24 @@ async fn index() -> Html<&'static str> {
     Html(INDEX_HTML)
 }
 
+/// Stanje kredita ulogovanog korisnika (za account stranu).
+async fn api_credits(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let Some(token) = bearer(&headers) else {
+        return Err((StatusCode::UNAUTHORIZED, "login required".to_string()));
+    };
+    let store = store_or_503(&state)?;
+    let user = store
+        .verify(token)
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "invalid token".to_string()))?;
+    let credits = store
+        .credits(&user)
+        .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "auth disabled".to_string()))?;
+    Ok(Json(serde_json::json!({"credits": credits})))
+}
+
 /// Sigurnosni headeri na svaki odgovor. CSP je labav za inline
 /// script/style jer je frontend inline; stroži kad se izdvoji u fajl.
 async fn security_headers(mut res: Response) -> Response {
@@ -785,6 +804,11 @@ pub fn router(state: AppState) -> Router {
         .route("/summarize", post(summarize))
         .route("/ask", post(ask))
         .route("/billing/webhook", post(billing_webhook))
+        .route("/api/credits", get(api_credits))
+        .route("/welcome", get(|| async { Html(pages::welcome()) }))
+        .route("/pricing", get(|| async { Html(pages::pricing()) }))
+        .route("/account", get(|| async { Html(pages::account()) }))
+        .route("/docs", get(|| async { Html(pages::docs()) }))
         .route_layer(middleware::from_fn(rate_limit))
         .layer(Extension(state.limiter.clone()))
         .layer(middleware::map_response(security_headers))
@@ -970,6 +994,49 @@ mod tests {
             .await
             .expect("oneshot");
         assert!(res.headers().contains_key("x-request-id"));
+    }
+
+    #[tokio::test]
+    async fn pages_serve_html() {
+        for uri in ["/welcome", "/pricing", "/account", "/docs"] {
+            let res = router(test_state())
+                .oneshot(request(uri))
+                .await
+                .expect("oneshot");
+            assert_eq!(res.status(), StatusCode::OK, "{uri}");
+            let headers = res.headers().clone();
+            let body = axum::body::to_bytes(res.into_body(), 65536)
+                .await
+                .expect("body");
+            assert!(headers["content-type"]
+                .to_str()
+                .expect("ct")
+                .contains("text/html"));
+            assert!(body.windows(7).any(|w| w == b"Reflect"), "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn api_credits_needs_auth_and_returns_balance() {
+        let state = auth_state();
+        let denied = router(state.clone())
+            .oneshot(request("/api/credits"))
+            .await
+            .expect("oneshot");
+        assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+        let token = login_token(&state).await;
+        let req = axum::http::Request::builder()
+            .uri("/api/credits")
+            .header("authorization", format!("Bearer {token}"))
+            .body(axum::body::Body::empty())
+            .expect("request");
+        let res = router(state).oneshot(req).await.expect("oneshot");
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 4096)
+            .await
+            .expect("body");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert!((json["credits"].as_f64().expect("credits") - 1.0).abs() < 1e-9);
     }
 
     #[tokio::test]

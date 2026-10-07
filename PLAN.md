@@ -62,6 +62,9 @@ Besplatan meta-pretraživač, engleski prvo, ostali jezici po potražnji. Podraz
 3. **Perplexica focus lensovi**: academic lens gotov (OpenAlex); discussions/calc lensovi kad dobiju izvor bez ključa.
 4. **Stract čitanje**: ranking ideje (optics filteri) — istraživanje, ne kod.
 
+## 13. Stranice (dizajn: dark slate brend, serif display + system sans, 0 eksternih)
+- [x] **welcome** (`/welcome`), **pricing** (`/pricing`), **account** (`/account`), **docs** (`/docs`) — Gotovo: `pages.rs`, zajednički stil, `/api/credits` za stanje, testovi + live 200.
+
 ## 8. Koraci — FAZA 4: Prihod (posle trakcije, ne pre)
 - [x] **4.1 Nalozi** — Gotovo: argon2id + JWT (30d), dnevna kvota 1000, Bearer na /search, 49/49 testova + živ curl (201/200/401).
 - [x] **4.2 Ad slot** — Gotovo: odvojen `sponsored` slot (null bez inventara), organski poredak netaknut (test), frontend aside.
