@@ -3,7 +3,7 @@
 //! Zajednički stil: dark slate brend kao app, serif naslovi + system sans,
 //! 0 eksternih zahteva (nema CDN, fontova, trackera).
 
-const CSS: &str = "*{box-sizing:border-box}body{margin:0;background:#020617;color:#e2e8f0;font-family:system-ui,sans-serif;line-height:1.6}main{max-width:720px;margin:0 auto;padding:48px 20px}h1,h2{font-family:Georgia,serif;color:#f8fafc}h1{font-size:40px;line-height:1.15;margin:0 0 16px}p.lead{font-size:18px;color:#94a3b8}a{color:#38bdf8}nav{padding:16px 20px;border-bottom:1px solid #1e293b}nav a{margin-right:16px;font-size:14px;text-decoration:none}.cta{display:inline-block;background:#0284c7;color:#fff!important;font-weight:600;border-radius:8px;padding:12px 24px;text-decoration:none;margin:8px 8px 8px 0}.cta:hover{background:#0ea5e9}.ghost{background:transparent;border:1px solid #334155}.card{border:1px solid #1e293b;border-radius:8px;padding:20px;margin:16px 0;background:#0f172a}table{width:100%;border-collapse:collapse;font-size:14px}td,th{border-bottom:1px solid #1e293b;padding:10px 8px;text-align:left}th{color:#94a3b8;font-weight:600}code{background:#1e293b;border-radius:4px;padding:2px 6px;font-size:13px}input{background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:9px 12px;width:100%;margin:4px 0}button{background:#0284c7;border:none;color:#fff;border-radius:6px;padding:10px 16px;cursor:pointer;font-weight:600}button:hover{background:#0ea5e9}.num{font-size:28px;font-weight:700;color:#f8fafc}footer{border-top:1px solid #1e293b;padding:24px 20px;text-align:center;color:#475569;font-size:13px}";
+const CSS: &str = "*{box-sizing:border-box}body{margin:0;background:#020617;color:#f1f5f9;font-family:system-ui,sans-serif;line-height:1.6;min-height:100vh}main{max-width:720px;margin:0 auto;padding:32px 20px}h1,h2{color:#f8fafc}h1{font-size:32px;line-height:1.2;margin:0 0 12px;font-weight:700}h2{font-size:19px;margin:0 0 8px}p.lead{font-size:17px;color:#94a3b8}a{color:#38bdf8}header{background:rgba(15,23,42,.95);border-bottom:1px solid #1e293b;padding:12px 16px;display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center}header .brand{font-weight:700;font-size:17px;color:#f8fafc;margin-right:8px}header a{font-size:14px;text-decoration:none}.cta{display:inline-block;background:#0284c7;color:#fff!important;font-weight:600;border-radius:6px;padding:11px 22px;text-decoration:none;margin:8px 8px 8px 0}.cta:hover{background:#0ea5e9}.ghost{background:transparent;border:1px solid #334155}.card{background:rgba(15,23,42,.7);border:1px solid #1e293b;border-radius:8px;padding:18px 20px;margin:14px 0}.card p:last-child{margin-bottom:0}table{width:100%;border-collapse:collapse;font-size:14px}td,th{border-bottom:1px solid #1e293b;padding:10px 8px;text-align:left}th{color:#94a3b8;font-weight:600}code{background:#1e293b;border-radius:4px;padding:2px 6px;font-size:13px}input{background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:9px 12px;width:100%;margin:4px 0;outline:none}input:focus{border-color:#0284c7}button{background:#0284c7;border:none;color:#fff;border-radius:6px;padding:10px 16px;cursor:pointer;font-weight:600}button:hover{background:#0ea5e9}.num{font-size:28px;font-weight:700;color:#f8fafc}footer{border-top:1px solid #1e293b;padding:24px 20px;text-align:center;color:#475569;font-size:13px}";
 
 fn shell(title: &str, body: &str) -> String {
     format!(
@@ -11,9 +11,9 @@ fn shell(title: &str, body: &str) -> String {
         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
         <title>{title} — Reflection Search</title>\
         <style>{CSS}</style></head><body>\
-        <nav><a href=\"/welcome\">Početna</a><a href=\"/\">Pretraga</a>\
+        <header><span class=\"brand\">Reflection Search</span><a href=\"/welcome\">Početna</a><a href=\"/\">Pretraga</a>\
         <a href=\"/pricing\">Cene</a><a href=\"/account\">Nalog</a>\
-        <a href=\"/docs\">Dokumentacija</a></nav>\
+        <a href=\"/docs\">Dokumentacija</a></header>\
         <main>{body}</main>\
         <footer>Reflection Search — free pretraga zauvek. Bez praćenja.</footer>\
         </body></html>"
