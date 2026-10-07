@@ -27,4 +27,9 @@ pub trait Source: Send + Sync {
 
     /// Pretraga; greška znači "ovaj izvor je prazan za ovaj upit".
     async fn search(&self, query: &Query) -> anyhow::Result<Vec<SearchResult>>;
+
+    /// Plaćeni izvor (API kvota) — zove se samo kad free izvori nemaju odgovor.
+    fn is_paid(&self) -> bool {
+        false
+    }
 }

@@ -18,10 +18,22 @@ pub const AGGREGATE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Rezervni timeout po izvoru u agregatoru (izvori imaju svoj kraći).
 const SOURCE_TIMEOUT_FALLBACK: Duration = Duration::from_secs(9);
 
-/// Poziva sve izvore paralelno, greške loguje i preskače, spaja i dedupuje.
-///
-/// Nijedan spor ili mrtav izvor ne sme da sruši ili zakoči pretragu.
+/// Poziva free izvore paralelno; plaćene (`is_paid`) samo kad free nemaju odgovor.
+/// Svaki potrošeni Brave poziv se broji — zato fallback, ne paralelno sa svima.
 pub async fn aggregate(sources: &[Arc<dyn Source>], query: &Query) -> Vec<SearchResult> {
+    let (paid, free): (Vec<_>, Vec<_>) = sources
+        .iter()
+        .cloned()
+        .partition(|s: &Arc<dyn Source>| s.is_paid());
+    let mut lists = run_all(&free, query).await;
+    if lists.iter().all(|l| l.is_empty()) {
+        lists.extend(run_all(&paid, query).await);
+    }
+    rank(lists)
+}
+
+/// Poziva date izvore paralelno, greške loguje i preskače.
+async fn run_all(sources: &[Arc<dyn Source>], query: &Query) -> Vec<Vec<SearchResult>> {
     let mut handles = Vec::with_capacity(sources.len());
     for source in sources {
         let (source, query) = (Arc::clone(source), query.clone());
@@ -51,7 +63,7 @@ pub async fn aggregate(sources: &[Arc<dyn Source>], query: &Query) -> Vec<Search
     let lists = tokio::time::timeout(AGGREGATE_TIMEOUT, gather)
         .await
         .unwrap_or_default();
-    rank(lists)
+    lists
 }
 
 /// Reciprocal-rank konstanta (standardna RRF vrednost).
@@ -192,6 +204,96 @@ mod tests {
         let sources: Vec<Arc<dyn sources::Source>> = vec![];
         let out = aggregate(&sources, &Query::new("x").expect("q")).await;
         assert!(out.is_empty());
+    }
+
+    struct Counting {
+        name: &'static str,
+        results: Vec<SearchResult>,
+        paid: bool,
+        hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+    #[async_trait::async_trait]
+    impl sources::Source for Counting {
+        fn name(&self) -> &'static str {
+            self.name
+        }
+        fn is_paid(&self) -> bool {
+            self.paid
+        }
+        async fn search(&self, _q: &Query) -> anyhow::Result<Vec<SearchResult>> {
+            self.hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(self.results.clone())
+        }
+    }
+
+    fn counting(
+        name: &'static str,
+        urls: &[&str],
+        paid: bool,
+        hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Arc<dyn sources::Source> {
+        Arc::new(Counting {
+            name,
+            results: urls
+                .iter()
+                .map(|u| SearchResult {
+                    title: "t".into(),
+                    url: (*u).into(),
+                    snippet: "s".into(),
+                    source: name.into(),
+                })
+                .collect(),
+            paid,
+            hits,
+        })
+    }
+
+    #[tokio::test]
+    async fn aggregate_skips_paid_when_free_has_results() {
+        use std::sync::atomic::Ordering;
+        let paid_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let sources: Vec<Arc<dyn sources::Source>> = vec![
+            counting(
+                "free",
+                &["https://a.com"],
+                false,
+                std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            ),
+            counting(
+                "paid",
+                &["https://b.com"],
+                true,
+                std::sync::Arc::clone(&paid_hits),
+            ),
+        ];
+        let out = aggregate(&sources, &Query::new("x").expect("q")).await;
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].url, "https://a.com");
+        assert_eq!(paid_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn aggregate_calls_paid_when_free_empty() {
+        use std::sync::atomic::Ordering;
+        let paid_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let sources: Vec<Arc<dyn sources::Source>> = vec![
+            counting(
+                "free",
+                &[],
+                false,
+                std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            ),
+            counting(
+                "paid",
+                &["https://b.com"],
+                true,
+                std::sync::Arc::clone(&paid_hits),
+            ),
+        ];
+        let out = aggregate(&sources, &Query::new("x").expect("q")).await;
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].url, "https://b.com");
+        assert_eq!(paid_hits.load(Ordering::SeqCst), 1);
     }
 
     #[test]

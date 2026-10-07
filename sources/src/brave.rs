@@ -90,6 +90,10 @@ impl Source for BraveSource {
         "brave"
     }
 
+    fn is_paid(&self) -> bool {
+        true
+    }
+
     async fn search(&self, query: &Query) -> anyhow::Result<Vec<SearchResult>> {
         let res = tokio::time::timeout(
             SOURCE_TIMEOUT,
