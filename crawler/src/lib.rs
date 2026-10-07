@@ -82,20 +82,19 @@ pub struct Crawler {
 
 impl Crawler {
     /// Pravi crawler sa konfiguracijom.
-    #[must_use]
-    pub fn new(config: CrawlConfig) -> Self {
+    pub fn new(config: CrawlConfig) -> Result<Self, CrawlError> {
         let client = reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .timeout(Duration::from_secs(15))
             .build()
-            .expect("client");
-        Self {
+            .map_err(|e| CrawlError::Fetch(format!("client: {e}")))?;
+        Ok(Self {
             client,
             config,
             robots_cache: HashMap::new(),
             last_hit: HashMap::new(),
             per_domain: HashMap::new(),
-        }
+        })
     }
 
     /// Puzi od semena; vraća skinute strane.
@@ -145,7 +144,9 @@ impl Crawler {
             let rules = self.load_robots(url).await;
             self.robots_cache.insert(domain.clone(), rules);
         }
-        let rules = self.robots_cache.get(&domain).expect("cached");
+        let Some(rules) = self.robots_cache.get(&domain) else {
+            return true;
+        };
         rules.allows(url.path())
     }
 
@@ -219,48 +220,51 @@ fn host_port(url: &url::Url) -> String {
 /// Vadi naslov, tekst i linkove iz HTML-a.
 fn extract(url: &str, html: &str) -> Page {
     let doc = scraper::Html::parse_document(html);
-    let title = doc
-        .select(&scraper::Selector::parse("title").expect("selector"))
-        .next()
+    let title = scraper::Selector::parse("title")
+        .ok()
+        .and_then(|sel| doc.select(&sel).next())
         .map(|t| t.text().collect::<String>().trim().to_string())
         .unwrap_or_default();
     let skip = ["script", "style", "nav", "header", "footer"];
     let mut text = String::new();
-    let body_sel = scraper::Selector::parse("body").expect("selector");
-    if let Some(body) = doc.select(&body_sel).next() {
-        for node in body.descendants() {
-            let Some(t) = node.value().as_text() else {
-                continue;
-            };
-            let inside_skip = node.ancestors().any(|a| {
-                a.value()
-                    .as_element()
-                    .is_some_and(|el| skip.contains(&el.name()))
-            });
-            if inside_skip {
-                continue;
-            }
-            let s = t.trim();
-            if !s.is_empty() {
-                if !text.is_empty() {
-                    text.push(' ');
+    if let Ok(body_sel) = scraper::Selector::parse("body") {
+        if let Some(body) = doc.select(&body_sel).next() {
+            for node in body.descendants() {
+                let Some(t) = node.value().as_text() else {
+                    continue;
+                };
+                let inside_skip = node.ancestors().any(|a| {
+                    a.value()
+                        .as_element()
+                        .is_some_and(|el| skip.contains(&el.name()))
+                });
+                if inside_skip {
+                    continue;
                 }
-                text.push_str(s);
+                let s = t.trim();
+                if !s.is_empty() {
+                    if !text.is_empty() {
+                        text.push(' ');
+                    }
+                    text.push_str(s);
+                }
             }
         }
     }
     let base = url::Url::parse(url).ok();
     let mut links = Vec::new();
-    let a_sel = scraper::Selector::parse("a[href]").expect("selector");
-    for a in doc.select(&a_sel) {
-        if let Some(href) = a.value().attr("href") {
-            let abs = match &base {
-                Some(b) => b.join(href).map(|u| u.to_string()).unwrap_or_default(),
-                None => href.to_string(),
-            };
-            if (abs.starts_with("http://") || abs.starts_with("https://")) && !links.contains(&abs)
-            {
-                links.push(abs);
+    if let Ok(a_sel) = scraper::Selector::parse("a[href]") {
+        for a in doc.select(&a_sel) {
+            if let Some(href) = a.value().attr("href") {
+                let abs = match &base {
+                    Some(b) => b.join(href).map(|u| u.to_string()).unwrap_or_default(),
+                    None => href.to_string(),
+                };
+                if (abs.starts_with("http://") || abs.starts_with("https://"))
+                    && !links.contains(&abs)
+                {
+                    links.push(abs);
+                }
             }
         }
     }

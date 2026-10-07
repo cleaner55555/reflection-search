@@ -137,8 +137,8 @@ impl UserStore {
         Argon2::default()
             .verify_password(password.as_bytes(), &parsed)
             .map_err(|_| AuthError::BadCredentials)?;
-        let exp = (chrono::Utc::now() + chrono::Duration::from_std(TOKEN_TTL).expect("ttl"))
-            .timestamp() as usize;
+        let ttl = chrono::Duration::from_std(TOKEN_TTL).map_err(|_| AuthError::Storage)?;
+        let exp = (chrono::Utc::now() + ttl).timestamp() as usize;
         encode(&Header::default(), &Claims { sub: id, exp }, &self.enc)
             .map_err(|_| AuthError::Storage)
     }

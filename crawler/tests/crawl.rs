@@ -58,7 +58,8 @@ async fn crawls_100_pages_respecting_robots() {
         max_pages: 100,
         max_per_domain: 1000,
         domain_delay: Duration::from_millis(0),
-    });
+    })
+    .expect("crawler");
     let pages = crawler
         .crawl(&[format!("{base}/"), format!("{base}/secret/x")])
         .await;
