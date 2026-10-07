@@ -1,0 +1,3 @@
+- insert:
+    - id: reflection-search
+      name: 'reflection-search-dsh-plugin'
