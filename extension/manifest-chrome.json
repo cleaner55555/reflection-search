@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Reflection Search",
+  "version": "0.1.0",
+  "description": "Free private meta-search: columns, no tracking.",
+  "omnibox": { "keyword": "rs" },
+  "permissions": ["storage"],
+  "optional_host_permissions": ["*://*/*"],
+  "host_permissions": ["http://127.0.0.1:3000/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html" }
+}
