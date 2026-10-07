@@ -78,7 +78,7 @@ function render() {
 
 function item(x) {
   return (
-    '<li class="card"><a href="' +
+    '<li class="card"><a target="_blank" rel="noopener" href="' +
     esc(x.url) +
     '">' +
     esc(x.title) +

@@ -715,7 +715,7 @@ s.ondragover=e=>e.preventDefault();
 s.ondrop=e=>{e.preventDefault();const from=+e.dataTransfer.getData('text/plain');const to=+s.dataset.i;if(from===to)return;const mv=cols.splice(from,1);cols.splice(to,0,mv[0]);save();render();search()};
 });
 }
-function item(x){return '<li class="card"><a href="'+esc(x.url)+'">'+esc(x.title)+'</a><p>'+esc(x.snippet||'')+'</p><span>['+esc(x.source)+']</span></li>'}
+function item(x){return '<li class="card"><a target="_blank" rel="noopener" href="'+esc(x.url)+'">'+esc(x.title)+'</a><p>'+esc(x.snippet||'')+'</p><span>['+esc(x.source)+']</span></li>'}
 async function search(){
 const qv=document.getElementById('q').value.trim();if(!qv)return;
 const res=await fetch('/search?limit=10&q='+encodeURIComponent(qv)+'&columns='+encodeURIComponent(cols.join(',')));
