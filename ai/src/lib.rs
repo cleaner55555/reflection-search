@@ -139,6 +139,9 @@ pub struct AiClient {
     price_out_per_m: f64,
 }
 
+/// Procena izlaznih tokena za gate (jednako `max_tokens` u zahtevu).
+pub const EST_OUT_TOKENS: u32 = 512;
+
 impl AiClient {
     /// Pravi klijent iz env (`AI_API_KEY` obavezan; ostalo ima default).
     /// Provajder iz `AI_PROVIDER` (`openai`/`deepseek`); `None` znači ugašen AI.
@@ -188,6 +191,19 @@ impl AiClient {
     #[must_use]
     pub fn model(&self) -> &str {
         &self.model
+    }
+
+    /// Gruba cena pre poziva: ulaz iz znakova + pun `max_tokens` kao izlaz.
+    /// Gate: korisnik mora imati bar ovoliko kredita; naplata je po stvarnom trošku.
+    #[must_use]
+    pub fn quote(&self, input_chars: usize) -> f64 {
+        let in_tokens = (input_chars.div_ceil(4)).max(1) as u32;
+        estimate_cost_usd(
+            self.price_in_per_m,
+            self.price_out_per_m,
+            in_tokens,
+            EST_OUT_TOKENS,
+        )
     }
 
     /// Sažima rezultate pretrage za upit (5.1).

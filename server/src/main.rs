@@ -390,6 +390,46 @@ fn ai_client_or_503(state: &AppState) -> Result<Arc<ai::AiClient>, (StatusCode, 
         .ok_or((StatusCode::SERVICE_UNAVAILABLE, "ai disabled".to_string()))
 }
 
+/// Prepaid gate: korisnik mora imati bar procenjeni trošak pre LLM poziva.
+/// Keš pogodak ne troši ništa i ne proverava stanje.
+fn charge_gate(
+    state: &AppState,
+    user: &str,
+    input_chars: usize,
+    client: &ai::AiClient,
+) -> Result<(), (StatusCode, String)> {
+    let store = store_or_503(state)?;
+    let balance = store
+        .credits(user)
+        .map_err(|_| (StatusCode::SERVICE_UNAVAILABLE, "auth disabled".to_string()))?;
+    if balance < client.quote(input_chars) {
+        return Err((
+            StatusCode::PAYMENT_REQUIRED,
+            "insufficient credits".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Knjiži stvarni trošak posle uspešnog poziva; vraća novo stanje za log.
+fn charge_spend(state: &AppState, user: &str, cost: f64) -> f64 {
+    let Ok(store) = store_or_503(state) else {
+        return f64::NAN;
+    };
+    store.spend_credits(user, cost).unwrap_or(f64::NAN)
+}
+
+/// Gruba veličina ulaza za procenu (upit + rezultati + šablon prompta).
+fn input_chars(query: &str, question: &str, results: &[SearchResult]) -> usize {
+    query.len()
+        + question.len()
+        + results
+            .iter()
+            .map(|r| r.title.len() + r.snippet.len() + r.url.len())
+            .sum::<usize>()
+        + 300
+}
+
 fn ai_response(answer: ai::AiAnswer, hit: bool) -> Response {
     let mut res = Json(answer).into_response();
     res.headers_mut().insert(
@@ -416,11 +456,18 @@ async fn summarize(
         return Ok(ai_response(hit, true));
     }
     let results = ranking::aggregate(&state.sources, &query).await;
+    charge_gate(
+        &state,
+        &user,
+        input_chars(&query.text, "", &results),
+        &client,
+    )?;
     let answer = client
         .summarize(&query.text, &results)
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
-    tracing::info!(user = %user, cost_usd = answer.cost_usd, model = %answer.model, "summarize billed");
+    let balance = charge_spend(&state, &user, answer.cost_usd);
+    tracing::info!(user = %user, cost_usd = answer.cost_usd, balance_usd = balance, model = %answer.model, "summarize billed");
     state.ai_cache.put(key, answer.clone()).await;
     Ok(ai_response(answer, false))
 }
@@ -445,11 +492,18 @@ async fn ask(
         return Ok(ai_response(hit, true));
     }
     let results = ranking::aggregate(&state.sources, &query).await;
+    charge_gate(
+        &state,
+        &user,
+        input_chars(&query.text, &body.question, &results),
+        &client,
+    )?;
     let answer = client
         .ask(&body.question, &query.text, &results)
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, e.to_string()))?;
-    tracing::info!(user = %user, cost_usd = answer.cost_usd, model = %answer.model, "ask billed");
+    let balance = charge_spend(&state, &user, answer.cost_usd);
+    tracing::info!(user = %user, cost_usd = answer.cost_usd, balance_usd = balance, model = %answer.model, "ask billed");
     state.ai_cache.put(key, answer.clone()).await;
     Ok(ai_response(answer, false))
 }
@@ -1085,7 +1139,12 @@ mod tests {
             .await
             .expect("body");
         let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
-        json["token"].as_str().expect("token").to_string()
+        let token = json["token"].as_str().expect("token").to_string();
+        // Test nalog dobija kredite (kao da je uplatio) — bez toga AI gate vraća 402.
+        let store = state.store.clone().expect("store");
+        let user = store.verify(&token).expect("verify");
+        store.grant_credits(&user, 1.0).expect("grant");
+        token
     }
 
     #[cfg(test)]
@@ -1187,5 +1246,89 @@ mod tests {
             .expect("body");
         let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
         assert_eq!(json["text"], "Rust is fast.");
+    }
+
+    async fn bare_login_token(state: &AppState) -> (String, String) {
+        let app = router(state.clone());
+        let _ = app
+            .oneshot(post_json(
+                "/auth/register",
+                creds("u@x.com", "dovoljno-dugo-1"),
+            ))
+            .await
+            .expect("register");
+        let app = router(state.clone());
+        let res = app
+            .oneshot(post_json(
+                "/auth/login",
+                creds("u@x.com", "dovoljno-dugo-1"),
+            ))
+            .await
+            .expect("login");
+        let body = axum::body::to_bytes(res.into_body(), 4096)
+            .await
+            .expect("body");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        let token = json["token"].as_str().expect("token").to_string();
+        let store = state.store.clone().expect("store");
+        let user = store.verify(&token).expect("verify");
+        (token, user)
+    }
+
+    #[tokio::test]
+    async fn ai_no_credits_is_402() {
+        let base = stub_llm(CHAT_JSON).await;
+        let state = ai_state(base);
+        let (token, _) = bare_login_token(&state).await;
+        let app = router(state);
+        let res = app
+            .oneshot(authed_request(
+                "/summarize",
+                &token,
+                serde_json::json!({"query": "rust"}),
+            ))
+            .await
+            .expect("oneshot");
+        assert_eq!(res.status(), StatusCode::PAYMENT_REQUIRED);
+    }
+
+    #[tokio::test]
+    async fn ai_spends_credits_once_then_hit_is_free() {
+        let base = stub_llm(CHAT_JSON).await;
+        let state = ai_state(base);
+        let token = login_token(&state).await;
+        let store = state.store.clone().expect("store");
+        let user = store.verify(&token).expect("verify");
+        let before = store.credits(&user).expect("credits");
+        let app = router(state.clone());
+        let res = app
+            .oneshot(authed_request(
+                "/summarize",
+                &token,
+                serde_json::json!({"query": "rust"}),
+            ))
+            .await
+            .expect("oneshot");
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), 16384)
+            .await
+            .expect("body");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        let cost = json["cost_usd"].as_f64().expect("cost");
+        assert!(cost > 0.0);
+        let after = store.credits(&user).expect("credits");
+        assert!((before - after - cost).abs() < 1e-9);
+        let app = router(state);
+        let res = app
+            .oneshot(authed_request(
+                "/summarize",
+                &token,
+                serde_json::json!({"query": "rust"}),
+            ))
+            .await
+            .expect("oneshot");
+        assert_eq!(res.headers()["x-cache"], "HIT");
+        let same = store.credits(&user).expect("credits");
+        assert!((same - after).abs() < 1e-12);
     }
 }

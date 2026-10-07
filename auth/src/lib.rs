@@ -186,6 +186,52 @@ impl UserStore {
         .map_err(|_| AuthError::Storage)?;
         Ok(true)
     }
+
+    /// Stanje AI kredita korisnika (USD, prepaid).
+    pub fn credits(&self, user_id: &str) -> Result<f64, AuthError> {
+        self.db
+            .lock()
+            .map_err(|_| AuthError::Storage)?
+            .query_row(
+                "SELECT credits FROM users WHERE id = ?1",
+                rusqlite::params![user_id],
+                |r| r.get(0),
+            )
+            .map_err(|_| AuthError::Storage)
+    }
+
+    /// Uplata kredita (Polar webhook / admin); vraća novo stanje.
+    pub fn grant_credits(&self, user_id: &str, amount: f64) -> Result<f64, AuthError> {
+        if !amount.is_finite() || amount <= 0.0 {
+            return Err(AuthError::BadInput);
+        }
+        self.db
+            .lock()
+            .map_err(|_| AuthError::Storage)?
+            .execute(
+                "UPDATE users SET credits = credits + ?1 WHERE id = ?2",
+                rusqlite::params![amount, user_id],
+            )
+            .map_err(|_| AuthError::Storage)?;
+        self.credits(user_id)
+    }
+
+    /// Skida trošak AI poziva; vraća novo stanje (može u mali minus —
+    /// gate pre poziva je kontrola, ovo je knjiženje stvarnog troška).
+    pub fn spend_credits(&self, user_id: &str, cost: f64) -> Result<f64, AuthError> {
+        if !cost.is_finite() || cost < 0.0 {
+            return Err(AuthError::BadInput);
+        }
+        self.db
+            .lock()
+            .map_err(|_| AuthError::Storage)?
+            .execute(
+                "UPDATE users SET credits = credits - ?1 WHERE id = ?2",
+                rusqlite::params![cost, user_id],
+            )
+            .map_err(|_| AuthError::Storage)?;
+        self.credits(user_id)
+    }
 }
 
 /// Nasumični id bez nove zavisnosti (rand 0.8 + hex ručno).
@@ -258,6 +304,26 @@ mod tests {
             assert!(s.spend(&id).expect("spend"));
         }
         assert!(!s.spend(&id).expect("over"));
+    }
+
+    #[test]
+    fn credits_grant_spend_roundtrip() {
+        let s = store();
+        let id = s
+            .register("a@b.com", "dovoljno-dugacka-1")
+            .expect("register");
+        assert!((s.credits(&id).expect("credits") - 0.0).abs() < f64::EPSILON);
+        assert!((s.grant_credits(&id, 1.0).expect("grant") - 1.0).abs() < 1e-9);
+        let left = s.spend_credits(&id, 0.25).expect("spend");
+        assert!((left - 0.75).abs() < 1e-9);
+        assert!(matches!(
+            s.grant_credits(&id, f64::NAN),
+            Err(AuthError::BadInput)
+        ));
+        assert!(matches!(
+            s.spend_credits(&id, -1.0),
+            Err(AuthError::BadInput)
+        ));
     }
 
     #[test]

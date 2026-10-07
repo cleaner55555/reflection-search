@@ -12,7 +12,7 @@ Trošak pretrage po upitu mora biti ispod prihoda — meriti kvartalno.
 - Free: dnevni limit pretraga, bez AI.
 - Pro: mesečno — AI sažeci + više kolona + čuvanje rasporeda.
 - Academic (predlog): OpenAlex lens + citiranost sortirano — free beta dok se meri trošak, kasnije deo Pro ili poseban tier za institucije.
-- AI dopuna: pay-as-you-go krediti za teške modele.
+- AI dopuna: pay-as-you-go krediti za teške modele. Prepaid: poziv traži procenjeni trošak unapred (402 bez pokrića), naplata po stvarnom `cost_usd`, keš pogodak besplatan.
 
 ## Pravila
 - Nikad ne spuštati redovnu cenu ispod troška po teškom korisniku.

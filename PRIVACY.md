@@ -8,9 +8,9 @@
 - Keš pretraga je in-memory (ključ = upit+limit+kolone), TTL 10 min, bez vezivanja za korisnika.
 
 ## Sa nalogom (kvota + AI)
-- `users.db` (SQLite): email, argon2id hash, dnevna potrošnja po danu. Ništa drugo.
-- AI pozivi loguju: korisnik, model, `cost_usd`. Tekst pitanja/odgovora se ne loguje.
-- AI keš: po korisniku+upitu, in-memory, isti TTL kao search keš.
+- `users.db` (SQLite): email, argon2id hash, dnevna potrošnja po danu, AI kreditno stanje (USD). Ništa drugo.
+- AI pozivi loguju: korisnik, model, `cost_usd`, preostalo stanje. Tekst pitanja/odgovora se ne loguje.
+- AI je prepaid: bez kredita 402, trošak se skida po pozivu, keš pogodak je besplatan.
 
 ## Šta se šalje trećim stranama (nužno za meta-pretragu)
 | Izvor | Šta ide | Ključ |
