@@ -66,8 +66,8 @@ pub fn account() -> String {
         "<h1>Tvoj nalog.</h1>\
         <p class=\"lead\">Uloguj se da vidiš kredite i token za agente.</p>\
         <div class=\"card\"><h2>Prijava</h2>\
-        <input id=\"email\" placeholder=\"email\" autocomplete=\"email\">\
-        <input id=\"pass\" type=\"password\" placeholder=\"lozinka (min 10 znakova)\">\
+        <input id=\"email\" aria-label=\"email\" placeholder=\"email\" autocomplete=\"email\">\
+        <input id=\"pass\" aria-label=\"lozinka\" type=\"password\" placeholder=\"lozinka (min 10 znakova)\">\
         <p><button id=\"login\">Prijavi se</button> <button id=\"reg\" class=\"ghost\" style=\"background:transparent;border:1px solid #334155\">Registruj se</button></p>\
         <p id=\"msg\"></p></div>\
         <div class=\"card\" id=\"dash\" style=\"display:none\"><h2>Stanje</h2>\

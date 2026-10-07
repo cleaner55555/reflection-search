@@ -676,35 +676,56 @@ fn cached_response(body: CachedBody, hit: bool) -> Response {
 }
 
 /// Minimalan frontend: jedna lista, search box, fetch ka `/search`.
+/// Naslovna: Kagi raspored (centar), default lista, kolone na dugme, AI u toku.
 const INDEX_HTML: &str = r#"<!doctype html>
-<html lang="en" class="dark"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reflection Search</title>
-<style>:root{--bg:#020617;--panel:#0f172a;--panel2:rgba(30,41,59,.7);--line:#1e293b;--line2:#334155;--txt:#f1f5f9;--mut:#94a3b8;--dim:#64748b;--link:#38bdf8;--acc:#0284c7;--acc-h:#0ea5e9}html[data-theme=light]{--bg:#faf9f7;--panel:#fff;--panel2:#f4f1ea;--line:#e8e4dc;--line2:#c9c4ba;--txt:#232946;--mut:#5b5b7a;--dim:#9a97ad;--link:#205fce;--acc:#205fce;--acc-h:#1a4fb0}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,sans-serif;min-height:100vh}header{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}h1{font-size:18px;font-weight:700;margin:0 8px 0 0;white-space:nowrap}form#f{display:flex;gap:8px;flex:1;min-width:200px;max-width:640px}input,select{background:var(--panel);border:1px solid var(--line2);color:var(--txt);border-radius:6px;padding:7px 12px;outline:none}input:focus{border-color:var(--acc)}button{background:var(--panel);border:1px solid var(--line2);color:var(--txt);border-radius:6px;padding:7px 12px;cursor:pointer}button:hover{filter:brightness(1.15)}button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}button.primary:hover{background:var(--acc-h)}#ad{padding:8px 16px 0}main{display:flex;gap:12px;overflow-x:auto;padding:16px;align-items:flex-start}main::-webkit-scrollbar,ul::-webkit-scrollbar{height:8px;width:6px}main::-webkit-scrollbar-thumb,ul::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}.col{width:340px;min-width:340px;max-height:calc(100vh - 140px);background:var(--panel);border:1px solid var(--line);border-radius:8px;display:flex;flex-direction:column;overflow:hidden}.colhead{padding:8px 12px;background:var(--panel2);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;cursor:move}.colhead h2{font-size:15px;margin:0;flex:1}.grip,.x{color:var(--dim);background:none;border:none;padding:0 4px}.x:hover{color:#f87171}.col ul{overflow-y:auto;padding:8px;margin:0;list-style:none;display:flex;flex-direction:column;gap:8px}.card{background:var(--panel2);border-radius:6px;padding:8px}.card a{color:var(--link);font-size:13px;font-weight:600;text-decoration:none}.card a:hover{text-decoration:underline}.card p{color:var(--mut);font-size:12px;margin:4px 0}.card span{color:var(--dim);font-size:11px}.empty{color:var(--dim);font-size:13px;padding:0 4px}aside{border:1px dashed var(--line2);border-radius:6px;padding:8px;font-size:12px;color:var(--mut)}.dragging{opacity:.4}#aibox{margin:0 16px 4px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:none}#aibox.show{display:block}#aibox h2{font-size:15px;margin:0 0 6px}#aibox p{font-size:14px;margin:6px 0}#aibox .cost{color:var(--dim);font-size:12px}</style></head>
+<meta name='theme-color' content='#020617'><style>html{color-scheme:dark}html[data-theme=light]{color-scheme:light}:focus-visible{outline:2px solid var(--acc);outline-offset:2px}button{touch-action:manipulation}@media (prefers-reduced-motion:reduce){.card{transition:none}}:root{--bg:#020617;--panel:#0f172a;--panel2:rgba(30,41,59,.7);--line:#1e293b;--line2:#334155;--txt:#f1f5f9;--mut:#94a3b8;--dim:#64748b;--link:#38bdf8;--acc:#0284c7;--acc-h:#0ea5e9}html[data-theme=light]{--bg:#faf9f7;--panel:#fff;--panel2:#f4f1ea;--line:#e8e4dc;--line2:#c9c4ba;--txt:#232946;--mut:#5b5b7a;--dim:#9a97ad;--link:#205fce;--acc:#205fce;--acc-h:#1a4fb0}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,sans-serif;min-height:100vh}#topbar{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}.brand{font-weight:700;font-size:17px;cursor:pointer;white-space:nowrap}form{display:flex;gap:8px}input,select{background:var(--panel);border:1px solid var(--line2);color:var(--txt);border-radius:8px;padding:9px 14px;outline:none;font-size:15px}input:focus{border-color:var(--acc)}button{background:var(--panel);border:1px solid var(--line2);color:var(--txt);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:15px}button:hover{filter:brightness(1.15)}button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}button.primary:hover{background:var(--acc-h)}#home{min-height:88vh;display:flex;align-items:center;justify-content:center}.hero{max-width:620px;width:100%;text-align:center;padding:0 20px}.logo{font-size:46px;margin:0 0 4px}.tag{color:var(--mut);font-size:17px;margin:0 0 8px}#fh{margin:26px 0 10px}#fh input{flex:1;font-size:17px;padding:13px 18px;border-radius:12px}.chips{margin:6px 0 18px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.chips button{font-size:13px;padding:6px 12px;border-radius:20px}.aihome{display:flex;gap:8px;margin:0 0 26px}.aihome input{flex:1;font-size:14px}nav.home{display:flex;gap:18px;justify-content:center;flex-wrap:wrap}nav.home a{color:var(--mut);font-size:14px;text-decoration:none}nav.home a:hover{color:var(--txt)}.colbar{padding:10px 16px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}#ad{padding:8px 16px 0}#aibox{margin:12px 16px 0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:none;max-width:760px}#aibox.show{display:block}#aibox h2{font-size:15px;margin:0 0 6px}#aibox p{font-size:14px;margin:6px 0}#aibox .cost{color:var(--dim);font-size:12px}main{display:flex;gap:12px;overflow-x:auto;padding:16px;align-items:flex-start}main::-webkit-scrollbar,ul::-webkit-scrollbar{height:8px;width:6px}main::-webkit-scrollbar-thumb,ul::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}.col{width:360px;min-width:360px;max-height:calc(100vh - 150px);background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;overflow:hidden}.colhead{padding:10px 12px;background:var(--panel2);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;cursor:move}.colhead h2{font-size:15px;margin:0;flex:1}.badge{background:var(--panel);border:1px solid var(--line2);color:var(--mut);font-size:12px;border-radius:12px;padding:1px 9px}.grip{color:var(--dim);background:none;border:none;padding:6px 8px;font-size:16px;cursor:grab}.x{color:var(--dim);background:none;border:none;width:32px;height:32px;font-size:16px;border-radius:6px}.x:hover{color:#f87171;background:var(--panel)}.col ul{overflow-y:auto;padding:10px;margin:0;list-style:none;display:flex;flex-direction:column;gap:10px}#list{max-width:760px;margin:0 auto;padding:16px;list-style:none;display:flex;flex-direction:column;gap:12px}.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;transition:transform .12s ease}.card:hover{transform:translateY(-1px)}.card a{color:var(--link);font-size:15px;font-weight:600;text-decoration:none}.card a:hover{text-decoration:underline}.card p{color:var(--mut);font-size:13px;margin:6px 0}.card span{color:var(--dim);font-size:11px}.empty{color:var(--dim);font-size:13px;padding:0 4px}aside{border:1px dashed var(--line2);border-radius:6px;padding:8px;font-size:12px;color:var(--mut);margin:0 16px}.dragging{opacity:.4}</style></head>
 <body>
-<header>
-<h1>Reflection Search</h1>
-<form id="f"><input id="q" style="flex:1" placeholder="pretraga..." autofocus><button class="primary">Traži</button></form>
-<select id="src"><option value="all">all</option><option value="brave">brave</option><option value="wikipedia">wikipedia</option><option value="openalex">openalex</option><option value="own-index">own-index</option></select>
-<button id="add">+ Kolona</button>
-<button id="theme" title="svetla/tamna tema">◐</button>
+<header id="topbar" style="display:none">
+<span class="brand" id="home-link">Reflection Search</span>
+<form id="f"><input id="q" aria-label="upit za pretragu" style="flex:1;min-width:140px" placeholder="pretraga..."><button class="primary">Traži</button></form>
+<button id="modebtn" aria-label="prebaci lista kolone">Kolone</button>
+<button id="theme" title="svetla/tamna tema" aria-label="promeni temu">◐</button>
 </header>
+<section id="home">
+<div class="hero">
+<h1 class="logo">Reflection Search</h1>
+<p class="tag">Free pretraga bez praćenja. Bez naloga.</p>
+<form id="fh"><input id="hq" aria-label="upit za pretragu" placeholder="pretraži web..." autofocus><button class="primary">Traži</button></form>
+<div class="chips"><button data-q="rust">rust</button><button data-q="transformer paper">transformer paper</button><button data-q="breaking news today">vesti</button></div>
+<div class="aihome"><input id="haskq" aria-label="pitanje za AI" placeholder="...ili pitaj AI (treba token)"><button id="haskbtn">Pitaj AI</button></div>
+<nav class="home"><a href="/welcome">O projektu</a><a href="/pricing">Cene</a><a href="/account">Nalog</a><a href="/docs">Dokumentacija</a></nav>
+</div>
+</section>
+<section id="app" style="display:none">
 <div id="ad"></div>
-<div style="padding:8px 16px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="askq" style="flex:1;min-width:200px;max-width:480px" placeholder="pitaj AI o rezultatima (treba token)..."><button id="askbtn">Pitaj AI</button><button id="sumbtn">Sažmi rezultate</button><input id="tok" style="max-width:220px" placeholder="token (sa /account)" type="password"></div>
+<div class="colbar" id="colbar" style="display:none"><select id="src" aria-label="izvor za novu kolonu"><option value="all">all</option><option value="brave">brave</option><option value="wikipedia">wikipedia</option><option value="openalex">openalex</option><option value="own-index">own-index</option></select><button id="add">+ Kolona</button><input id="tok" aria-label="AI token" style="max-width:220px" placeholder="token (sa /account)" type="password" autocomplete="off" spellcheck="false"></div>
 <div id="aibox"><h2>AI odgovor</h2><p id="aitext"></p><p class="cost" id="aicost"></p></div>
 <main id="cols"></main>
+<ul id="list"></ul>
+</section>
 <script>
 try{if(localStorage.getItem('rs-theme')==='light')document.documentElement.setAttribute('data-theme','light')}catch(e){}
 let cols=[];try{cols=JSON.parse(localStorage.getItem('rs-cols')||'["all"]')}catch(e){cols=['all']}
-function save(){try{localStorage.setItem('rs-cols',JSON.stringify(cols))}catch(e){}}
+let mode='list';try{mode=localStorage.getItem('rs-mode')||'list'}catch(e){}
+function save(){try{localStorage.setItem('rs-cols',JSON.stringify(cols));localStorage.setItem('rs-mode',mode)}catch(e){}}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function dot(src){const m={all:'#38bdf8',brave:'#f59e0b',wikipedia:'#10b981',openalex:'#fb7185','own-index':'#64748b'};return '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(m[src]||'#64748b')+'"></span> '}
 function render(){
+const listMode=mode==='list';
+document.getElementById('cols').style.display=listMode?'none':'flex';
+document.getElementById('list').style.display=listMode?'flex':'none';
+document.getElementById('colbar').style.display=listMode?'none':'flex';
+document.getElementById('modebtn').textContent=listMode?'Kolone':'Lista';
+if(listMode)return;
 const m=document.getElementById('cols');m.innerHTML='';
 cols.forEach((c,i)=>{
 const d=document.createElement('section');
 d.className='col';
 d.draggable=true;d.dataset.i=i;
-d.innerHTML='<div class="colhead"><span class="grip">++</span><h2>'+esc(c)+'</h2><button class="x" data-x="'+i+'">x</button></div><ul id="col-'+i+'"><li class="empty">-</li></ul>';
+d.innerHTML='<div class="colhead" tabindex="0" data-kb="'+i+'"><span class="grip" aria-hidden="true">⠿</span><h2>'+dot(c)+esc(c)+' <span class="badge" id="cnt-'+i+'"></span></h2><button class="x" data-x="'+i+'" title="ukloni kolonu" aria-label="ukloni kolonu '+esc(c)+'">✕</button></div><ul id="col-'+i+'"><li class="empty">—</li></ul>';
 m.appendChild(d);
 });
 m.querySelectorAll('[data-x]').forEach(b=>{b.onclick=()=>{cols.splice(+b.dataset.x,1);if(!cols.length)cols=['all'];save();render();search()}});
@@ -714,32 +735,56 @@ s.ondragend=()=>s.classList.remove('dragging');
 s.ondragover=e=>e.preventDefault();
 s.ondrop=e=>{e.preventDefault();const from=+e.dataTransfer.getData('text/plain');const to=+s.dataset.i;if(from===to)return;const mv=cols.splice(from,1);cols.splice(to,0,mv[0]);save();render();search()};
 });
+m.querySelectorAll('[data-kb]').forEach(h=>{h.onkeydown=e=>{if(!e.altKey)return;const i=+h.dataset.kb;const j=i+((e.key==='ArrowRight')?1:(e.key==='ArrowLeft'?-1:0));if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;if(j<0||j>=cols.length)return;e.preventDefault();const mv=cols.splice(i,1);cols.splice(j,0,mv[0]);save();render();search()}});
 }
 function item(x){return '<li class="card"><a target="_blank" rel="noopener" href="'+esc(x.url)+'">'+esc(x.title)+'</a><p>'+esc(x.snippet||'')+'</p><span>['+esc(x.source)+']</span></li>'}
 async function search(){
 const qv=document.getElementById('q').value.trim();if(!qv)return;
+showApp();
+if(mode==='list'){
+const res=await fetch('/search?limit=20&q='+encodeURIComponent(qv));
+const j=await res.json();
+showAd(j);
+document.getElementById('list').innerHTML=(j.results||[]).map(item).join('')||'<li class="empty">nema rezultata</li>';
+return;
+}
 const res=await fetch('/search?limit=10&q='+encodeURIComponent(qv)+'&columns='+encodeURIComponent(cols.join(',')));
 const j=await res.json();
-document.getElementById('ad').innerHTML=j.sponsored?'<aside>Sponsored: <a href="'+esc(j.sponsored.url)+'">'+esc(j.sponsored.title)+'</a></aside>':'';
+showAd(j);
 cols.forEach((c,i)=>{
 const ul=document.getElementById('col-'+i);if(!ul)return;
 const rows=(j.columns&&j.columns[c])||[];
 ul.innerHTML=rows.length?rows.map(item).join(''):'<li class="empty">nema rezultata</li>';
+const b=document.getElementById('cnt-'+i);if(b)b.textContent=rows.length;
 });
 }
-document.getElementById('f').onsubmit=e=>{e.preventDefault();search()};
-document.getElementById('add').onclick=()=>{const v=document.getElementById('src').value;if(!cols.includes(v)){cols.push(v);save();render();search()}};
+function showAd(j){document.getElementById('ad').innerHTML=j.sponsored?'<aside>Sponsored: <a target="_blank" rel="noopener" href="'+esc(j.sponsored.url)+'">'+esc(j.sponsored.title)+'</a></aside>':''}
+function showApp(){document.getElementById('home').style.display='none';document.getElementById('app').style.display='block';document.getElementById('topbar').style.display='flex';const qv=document.getElementById('hq').value;if(qv)document.getElementById('q').value=qv;}
+function goHome(){document.getElementById('app').style.display='none';document.getElementById('topbar').style.display='none';document.getElementById('home').style.display='flex';}
 function token(){const t=document.getElementById('tok').value.trim();if(t){try{localStorage.setItem('rs-token',t)}catch(e){}return t}try{return localStorage.getItem('rs-token')||''}catch(e){return ''}}
 async function aiCall(path,body){
-const t=token();if(!t){document.getElementById('aibox').className='show';document.getElementById('aitext').textContent='Treba token sa /account (AI je prepaid).';document.getElementById('aicost').textContent='';return}
-let res;try{res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},body:JSON.stringify(body)})}catch(e){document.getElementById('aibox').className='show';document.getElementById('aitext').textContent='Server nedostupan.';document.getElementById('aicost').textContent='';return}
-const box=document.getElementById('aibox');box.className='show';
+const t=token();const box=document.getElementById('aibox');box.className='show';
+if(!t){document.getElementById('aitext').textContent='Treba token sa /account (AI je prepaid).';document.getElementById('aicost').textContent='';return}
+let res;try{res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+t},body:JSON.stringify(body)})}catch(e){document.getElementById('aitext').textContent='Server nedostupan.';document.getElementById('aicost').textContent='';return}
 if(res.status===402){document.getElementById('aitext').textContent='Nema kredita — dopuni na /pricing.';document.getElementById('aicost').textContent='';return}
 if(!res.ok){document.getElementById('aitext').textContent='Greška: '+res.status;document.getElementById('aicost').textContent='';return}
 const j=await res.json();document.getElementById('aitext').textContent=j.text||'';document.getElementById('aicost').textContent='model '+(j.model||'')+' · trošak $'+(Number(j.cost_usd)||0).toFixed(6);
 }
-document.getElementById('askbtn').onclick=()=>{const qv=document.getElementById('q').value.trim();const question=document.getElementById('askq').value.trim();if(!qv||!question)return;aiCall('/ask',{query:qv,question})};
-document.getElementById('sumbtn').onclick=()=>{const qv=document.getElementById('q').value.trim();if(!qv)return;aiCall('/summarize',{query:qv})};
+function askFlow(){
+const qv=(document.getElementById('hq').value||document.getElementById('q').value).trim();
+const question=document.getElementById('haskq').value.trim()||qv;
+if(!qv)return;
+document.getElementById('q').value=qv;showApp();
+aiCall('/ask',{query:qv,question});
+search();
+}
+document.getElementById('fh').onsubmit=e=>{e.preventDefault();document.getElementById('q').value=document.getElementById('hq').value;showApp();search()};
+document.getElementById('f').onsubmit=e=>{e.preventDefault();search()};
+document.getElementById('haskbtn').onclick=askFlow;
+document.getElementById('home-link').onclick=goHome;
+document.querySelectorAll('.chips button').forEach(b=>{b.onclick=()=>{document.getElementById('hq').value=b.dataset.q;document.getElementById('q').value=b.dataset.q;showApp();search()}});
+document.getElementById('modebtn').onclick=()=>{mode=(mode==='list')?'cols':'list';save();render();const qv=document.getElementById('q').value.trim();if(qv)search()};
+document.getElementById('add').onclick=()=>{const v=document.getElementById('src').value;if(!cols.includes(v)){cols.push(v);save();render();search()}};
 try{const st=localStorage.getItem('rs-token');if(st)document.getElementById('tok').value=st}catch(e){}
 document.getElementById('theme').onclick=()=>{const h=document.documentElement;const light=h.getAttribute('data-theme')==='light';if(light){h.removeAttribute('data-theme')}else{h.setAttribute('data-theme','light')}try{localStorage.setItem('rs-theme',light?'dark':'light')}catch(e){}};
 render();
