@@ -685,7 +685,7 @@ const INDEX_HTML: &str = r#"<!doctype html>
 <body>
 <header id="topbar" style="display:none">
 <span class="brand" id="home-link">Reflection Search</span>
-<form id="f"><input id="q" aria-label="upit za pretragu" style="flex:1;min-width:140px" placeholder="pretraga..."><button class="primary">Traži</button></form>
+<form id="f"><input id="q" aria-label="upit za pretragu" style="flex:1;min-width:140px" placeholder="pretraga..."><button class="primary">Traži</button><button id="aibtn" type="button" title="pitaj AI o upitu">Pitaj AI</button></form>
 <button id="modebtn" aria-label="prebaci lista kolone">Kolone</button>
 <button id="theme" title="svetla/tamna tema" aria-label="promeni temu">◐</button>
 </header>
@@ -693,9 +693,9 @@ const INDEX_HTML: &str = r#"<!doctype html>
 <div class="hero">
 <h1 class="logo">Reflection Search</h1>
 <p class="tag">Free pretraga bez praćenja. Bez naloga.</p>
-<form id="fh"><input id="hq" aria-label="upit za pretragu" placeholder="pretraži web..." autofocus><button class="primary">Traži</button></form>
+<form id="fh"><input id="hq" aria-label="upit za pretragu" placeholder="pretraži web..." autofocus><button class="primary">Traži</button><button id="haskbtn" type="button" class="ghost">Pitaj AI</button></form>
 <div class="chips"><button data-q="rust">rust</button><button data-q="transformer paper">transformer paper</button><button data-q="breaking news today">vesti</button></div>
-<div class="aihome"><input id="haskq" aria-label="pitanje za AI" placeholder="...ili pitaj AI (treba token)"><button id="haskbtn">Pitaj AI</button></div>
+<p class="tag" style="font-size:13px">AI je prepaid — token sa <a href="/account">naloga</a>.</p>
 <nav class="home"><a href="/welcome">O projektu</a><a href="/pricing">Cene</a><a href="/account">Nalog</a><a href="/docs">Dokumentacija</a></nav>
 </div>
 </section>
@@ -772,15 +772,15 @@ const j=await res.json();document.getElementById('aitext').textContent=j.text||'
 }
 function askFlow(){
 const qv=(document.getElementById('hq').value||document.getElementById('q').value).trim();
-const question=document.getElementById('haskq').value.trim()||qv;
 if(!qv)return;
 document.getElementById('q').value=qv;showApp();
-aiCall('/ask',{query:qv,question});
+aiCall('/ask',{query:qv,question:qv});
 search();
 }
 document.getElementById('fh').onsubmit=e=>{e.preventDefault();document.getElementById('q').value=document.getElementById('hq').value;showApp();search()};
 document.getElementById('f').onsubmit=e=>{e.preventDefault();search()};
 document.getElementById('haskbtn').onclick=askFlow;
+document.getElementById('aibtn').onclick=()=>{const qv=document.getElementById('q').value.trim();if(!qv)return;aiCall('/ask',{query:qv,question:qv});};
 document.getElementById('home-link').onclick=goHome;
 document.querySelectorAll('.chips button').forEach(b=>{b.onclick=()=>{document.getElementById('hq').value=b.dataset.q;document.getElementById('q').value=b.dataset.q;showApp();search()}});
 document.getElementById('modebtn').onclick=()=>{mode=(mode==='list')?'cols':'list';save();render();const qv=document.getElementById('q').value.trim();if(qv)search()};

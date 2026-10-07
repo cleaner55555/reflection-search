@@ -11,10 +11,10 @@ fn shell(title: &str, body: &str) -> String {
         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
         <title>{title} — Reflection Search</title>\
         <style>{CSS}</style></head><body>\
-        <header><span class=\"brand\">Reflection Search</span><a href=\"/welcome\">Početna</a><a href=\"/\">Pretraga</a>\
+        <header><span class=\"brand\">Reflection Search</span><span style=\"margin-left:auto;display:flex;gap:4px 16px;align-items:center;flex-wrap:wrap\"><a href=\"/welcome\">Početna</a><a href=\"/\">Pretraga</a>\
         <a href=\"/pricing\">Cene</a><a href=\"/account\">Nalog</a>\
         <a href=\"/docs\">Dokumentacija</a><button id=\"theme\" title=\"svetla/tamna tema\" \
-        style=\"width:auto;margin-left:auto;background:transparent;border:1px solid var(--line2);color:var(--txt)\">◐</button></header>\
+        style=\"width:auto;background:transparent;border:1px solid var(--line2);color:var(--txt)\">◐</button></span></header>\
         <script>try{{if(localStorage.getItem('rs-theme')==='light')document.documentElement.setAttribute('data-theme','light')}}catch(e){{}}document.getElementById('theme').onclick=()=>{{const h=document.documentElement;const light=h.getAttribute('data-theme')==='light';if(light){{h.removeAttribute('data-theme')}}else{{h.setAttribute('data-theme','light')}}try{{localStorage.setItem('rs-theme',light?'dark':'light')}}catch(e){{}}}};</script>\
         <main>{body}</main>\
         <footer>Reflection Search — free pretraga zauvek. Bez praćenja.</footer>\
