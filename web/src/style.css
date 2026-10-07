@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.card-lift {
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.card-lift:hover {
+  transform: translateY(-1px);
+}
+
+.col-scroll::-webkit-scrollbar {
+  height: 8px;
+  width: 6px;
+}
+
+.col-scroll::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.4);
+  border-radius: 4px;
+}

@@ -791,8 +791,18 @@ render();
 </script>
 </body></html>"#;
 
-async fn index() -> Html<&'static str> {
-    Html(INDEX_HTML)
+/// Favicon iz Vite builda (root dist fajl, van `/assets`).
+async fn favicon() -> impl IntoResponse {
+    match std::fs::read("web/dist/favicon.svg") {
+        Ok(body) => ([("content-type", "image/svg+xml")], body).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn index() -> Html<String> {
+    // Vite build kad postoji (pravi frontend), inače ugrađeni prototip.
+    // Time CI bez node-a i dalje prolazi, a dist je u .gitignore.
+    Html(std::fs::read_to_string("web/dist/index.html").unwrap_or_else(|_| INDEX_HTML.to_string()))
 }
 
 /// Stanje kredita ulogovanog korisnika (za account stranu).
@@ -866,7 +876,12 @@ pub fn router(state: AppState) -> Router {
         .route("/summarize", post(summarize))
         .route("/ask", post(ask))
         .route("/billing/webhook", post(billing_webhook))
+        .route("/favicon.svg", get(favicon))
         .route("/api/credits", get(api_credits))
+        .nest_service(
+            "/assets",
+            tower_http::services::ServeDir::new("web/dist/assets"),
+        )
         .route("/welcome", get(|| async { Html(pages::welcome()) }))
         .route("/pricing", get(|| async { Html(pages::pricing()) }))
         .route("/account", get(|| async { Html(pages::account()) }))
