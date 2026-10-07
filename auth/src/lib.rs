@@ -164,6 +164,20 @@ impl UserStore {
         Ok(data.claims.sub)
     }
 
+    /// Id korisnika po emailu (za billing webhook); nepoznat = BadCredentials.
+    pub fn user_id_by_email(&self, email: &str) -> Result<String, AuthError> {
+        let email = email.trim().to_lowercase();
+        self.db
+            .lock()
+            .map_err(|_| AuthError::Storage)?
+            .query_row(
+                "SELECT id FROM users WHERE email = ?1",
+                rusqlite::params![email],
+                |r| r.get(0),
+            )
+            .map_err(|_| AuthError::BadCredentials)
+    }
+
     /// Troši 1 iz dnevne kvote; `false` = potrošena.
     pub fn spend(&self, user_id: &str) -> Result<bool, AuthError> {
         let day = chrono::Utc::now().format("%Y-%m-%d").to_string();

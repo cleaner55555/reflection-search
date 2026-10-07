@@ -3,6 +3,7 @@
 //! Rute: `GET /` (frontend), `GET /health`, `GET /search?q=&limit=`.
 
 mod ads;
+mod billing;
 mod cache;
 
 use axum::{
@@ -55,6 +56,8 @@ pub struct AppState {
     ai: Option<Arc<ai::AiClient>>,
     /// Keš AI odgovora po korisniku+upitu — isti upit = 0 troška.
     ai_cache: Arc<cache::Cache<ai::AiAnswer>>,
+    /// Viđeni Polar webhook-idjevi (dedupe, Polar šalje duplikate).
+    billing_seen: Arc<cache::Cache<bool>>,
 }
 
 /// Keširano telo odgovora (bez headera).
@@ -97,6 +100,10 @@ impl AppState {
             store: Self::open_store(),
             ai: Self::open_ai(),
             ai_cache: Arc::new(cache::Cache::new(cache::DEFAULT_TTL, cache::MAX_ENTRIES)),
+            billing_seen: Arc::new(cache::Cache::new(
+                Duration::from_secs(3600),
+                cache::MAX_ENTRIES,
+            )),
         }
     }
 
@@ -361,6 +368,62 @@ async fn login(
         .login(&creds.email, &creds.password)
         .map_err(auth_error)?;
     Ok(Json(TokenResponse { token }))
+}
+
+/// Polar webhook: `order.paid` → uplata kredita po emailu kupca.
+/// Bez `POLAR_WEBHOOK_SECRET` ruta je ugašena (503). Uvek 200 posle
+/// uspešne verifikacije (Polar traži brz odgovor; duplikati se ignorišu).
+async fn billing_webhook(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let secret = std::env::var("POLAR_WEBHOOK_SECRET")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "billing disabled".to_string(),
+        ))?;
+    let header = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string()
+    };
+    let event_type = billing::verify(
+        &secret,
+        &header("webhook-id"),
+        &header("webhook-timestamp"),
+        &header("webhook-signature"),
+        &body,
+    )
+    .map_err(|_| (StatusCode::FORBIDDEN, "bad signature".to_string()))?;
+    let id = header("webhook-id");
+    if state.billing_seen.get(&id).await.is_some() {
+        return Ok(StatusCode::OK);
+    }
+    state.billing_seen.put(id, true).await;
+    if event_type == "order.paid" {
+        let event: serde_json::Value =
+            serde_json::from_slice(&body).map_err(|_| bad_request("bad payload"))?;
+        if let (Some(email), Some(credits)) = (
+            billing::customer_email(&event),
+            billing::credits_for(&event),
+        ) {
+            if let Some(store) = &state.store {
+                match store.user_id_by_email(&email) {
+                    Ok(uid) => {
+                        let balance = store.grant_credits(&uid, credits).unwrap_or(f64::NAN);
+                        tracing::info!(%email, credits, balance, "credits granted");
+                    }
+                    Err(_) => tracing::warn!(%email, "grant skipped"),
+                }
+            }
+        }
+    }
+    Ok(StatusCode::OK)
 }
 
 /// Telo sažetka (5.1).
@@ -721,6 +784,7 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/login", post(login))
         .route("/summarize", post(summarize))
         .route("/ask", post(ask))
+        .route("/billing/webhook", post(billing_webhook))
         .route_layer(middleware::from_fn(rate_limit))
         .layer(Extension(state.limiter.clone()))
         .layer(middleware::map_response(security_headers))
@@ -759,6 +823,10 @@ fn test_state() -> AppState {
         store: None,
         ai: None,
         ai_cache: Arc::new(cache::Cache::new(cache::DEFAULT_TTL, cache::MAX_ENTRIES)),
+        billing_seen: Arc::new(cache::Cache::new(
+            Duration::from_secs(3600),
+            cache::MAX_ENTRIES,
+        )),
     }
 }
 
@@ -774,6 +842,10 @@ fn auth_state() -> AppState {
         store: Some(Arc::new(store)),
         ai: None,
         ai_cache: Arc::new(cache::Cache::new(cache::DEFAULT_TTL, cache::MAX_ENTRIES)),
+        billing_seen: Arc::new(cache::Cache::new(
+            Duration::from_secs(3600),
+            cache::MAX_ENTRIES,
+        )),
     }
 }
 
@@ -811,6 +883,10 @@ fn stub_state() -> AppState {
         store: None,
         ai: None,
         ai_cache: Arc::new(cache::Cache::new(cache::DEFAULT_TTL, cache::MAX_ENTRIES)),
+        billing_seen: Arc::new(cache::Cache::new(
+            Duration::from_secs(3600),
+            cache::MAX_ENTRIES,
+        )),
     }
 }
 
@@ -1022,6 +1098,10 @@ mod tests {
             store: None,
             ai: None,
             ai_cache: Arc::new(cache::Cache::new(cache::DEFAULT_TTL, cache::MAX_ENTRIES)),
+            billing_seen: Arc::new(cache::Cache::new(
+                Duration::from_secs(3600),
+                cache::MAX_ENTRIES,
+            )),
         };
         let r1 = router(mk())
             .oneshot(request("/search?q=rust"))
@@ -1174,6 +1254,10 @@ mod tests {
             store: Some(Arc::new(store)),
             ai: Some(Arc::new(ai::AiClient::new("key", llm_base, "test-model"))),
             ai_cache: Arc::new(cache::Cache::new(cache::DEFAULT_TTL, cache::MAX_ENTRIES)),
+            billing_seen: Arc::new(cache::Cache::new(
+                Duration::from_secs(3600),
+                cache::MAX_ENTRIES,
+            )),
         }
     }
 
@@ -1333,6 +1417,83 @@ mod tests {
         let store = state.store.clone().expect("store");
         let user = store.verify(&token).expect("verify");
         (token, user)
+    }
+
+    #[cfg(test)]
+    fn signed_webhook(
+        secret: &str,
+        id: &str,
+        ts: &str,
+        body: &str,
+    ) -> axum::http::Request<axum::body::Body> {
+        use base64::Engine as _;
+        let signed = format!("{id}.{ts}.{body}");
+        let mut mac = hmac::Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes()).expect("mac");
+        use hmac::Mac as _;
+        mac.update(signed.as_bytes());
+        let sig = base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes());
+        axum::http::Request::builder()
+            .method("POST")
+            .uri("/billing/webhook")
+            .header("content-type", "application/json")
+            .header("webhook-id", id)
+            .header("webhook-timestamp", ts)
+            .header("webhook-signature", format!("v1,{sig}"))
+            .body(axum::body::Body::from(body.to_string()))
+            .expect("request")
+    }
+
+    #[cfg(test)]
+    fn webhook_now() -> String {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time")
+            .as_secs()
+            .to_string()
+    }
+
+    const PAID_BODY: &str = r#"{"type":"order.paid","data":{"amount":500,"metadata":{"credits_usd":5.0},"customer":{"email":"u@x.com"}}}"#;
+
+    #[tokio::test]
+    async fn billing_bad_signature_is_403() {
+        std::env::set_var("POLAR_WEBHOOK_SECRET", "whsec_test");
+        let state = auth_state();
+        let app = router(state);
+        let res = app
+            .oneshot(signed_webhook(
+                "whsec_other",
+                "msg_1",
+                &webhook_now(),
+                PAID_BODY,
+            ))
+            .await
+            .expect("oneshot");
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn billing_order_paid_grants_credits_once() {
+        std::env::set_var("POLAR_WEBHOOK_SECRET", "whsec_test");
+        let state = auth_state();
+        let (token, user) = bare_login_token(&state).await;
+        let _ = token;
+        let store = state.store.clone().expect("store");
+        assert!((store.credits(&user).expect("credits") - 0.0).abs() < f64::EPSILON);
+        let ts = webhook_now();
+        let app = router(state.clone());
+        let res = app
+            .oneshot(signed_webhook("whsec_test", "msg_2", &ts, PAID_BODY))
+            .await
+            .expect("oneshot");
+        assert_eq!(res.status(), StatusCode::OK);
+        assert!((store.credits(&user).expect("credits") - 5.0).abs() < 1e-9);
+        let app = router(state);
+        let res = app
+            .oneshot(signed_webhook("whsec_test", "msg_2", &ts, PAID_BODY))
+            .await
+            .expect("oneshot");
+        assert_eq!(res.status(), StatusCode::OK);
+        assert!((store.credits(&user).expect("credits") - 5.0).abs() < 1e-9);
     }
 
     #[tokio::test]
