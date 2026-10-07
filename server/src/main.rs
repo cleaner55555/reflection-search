@@ -836,7 +836,7 @@ async fn security_headers(mut res: Response) -> Response {
     h.insert(
         "content-security-policy",
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'",
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'",
         ),
     );
     h.insert(
