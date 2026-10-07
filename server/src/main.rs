@@ -543,26 +543,57 @@ fn cached_response(body: CachedBody, hit: bool) -> Response {
 
 /// Minimalan frontend: jedna lista, search box, fetch ka `/search`.
 const INDEX_HTML: &str = r#"<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en" class="dark"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Reflection Search (prototip)</title>
-<style>body{font-family:system-ui;max-width:720px;margin:2rem auto;padding:0 1rem}
-input{width:70%;padding:.5rem}button{padding:.5rem 1rem}
-li{margin:.6rem 0}.src{color:#666;font-size:.8rem}</style></head>
-<body><h1>Reflection Search</h1>
-<form id="f"><input id="q" name="q" placeholder="pretraga..." autofocus>
-<input id="c" name="c" placeholder="kolone: brave,wikipedia (pro, prazno=lista)" style="width:60%;margin-top:.4rem">
-<button>Traži</button></form><div id="cols"></div><ul id="r"></ul>
-<script>f.onsubmit=async e=>{e.preventDefault();
-const cols=c.value.trim();
-const res=await fetch('/search?limit=10&q='+encodeURIComponent(q.value)+(cols?'&columns='+encodeURIComponent(cols):''));
+<title>Reflection Search</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>main::-webkit-scrollbar{height:8px}main::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}.col{width:340px;min-width:340px;max-height:calc(100vh - 140px)}.dragging{opacity:.4}ul::-webkit-scrollbar{width:6px}ul::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}</style></head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+<header class="sticky top-0 z-10 bg-slate-900/95 border-b border-slate-800 px-4 py-3 flex flex-wrap gap-2 items-center">
+<h1 class="font-bold text-lg whitespace-nowrap">Reflection Search</h1>
+<form id="f" class="flex gap-2 flex-1 min-w-[200px] max-w-xl"><input id="q" class="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 outline-none focus:border-sky-500" placeholder="pretraga..." autofocus><button class="bg-sky-600 hover:bg-sky-500 rounded px-4 py-1.5 font-medium">Traži</button></form>
+<select id="src" class="bg-slate-800 border border-slate-700 rounded px-2 py-1.5"><option value="all">all</option><option value="brave">brave</option><option value="wikipedia">wikipedia</option><option value="own-index">own-index</option></select>
+<button id="add" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-3 py-1.5">+ Kolona</button>
+</header>
+<div id="ad" class="px-4 pt-2"></div>
+<main id="cols" class="flex gap-3 overflow-x-auto p-4 items-start"></main>
+<script>
+let cols=[];try{cols=JSON.parse(localStorage.getItem('rs-cols')||'["all"]')}catch(e){cols=['all']}
+function save(){try{localStorage.setItem('rs-cols',JSON.stringify(cols))}catch(e){}}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function render(){
+const m=document.getElementById('cols');m.innerHTML='';
+cols.forEach((c,i)=>{
+const d=document.createElement('section');
+d.className='col bg-slate-900 border border-slate-800 rounded-lg flex flex-col overflow-hidden';
+d.draggable=true;d.dataset.i=i;
+d.innerHTML='<div class="px-3 py-2 bg-slate-800/70 border-b border-slate-700 flex items-center gap-2 cursor-move"><span class="text-slate-500">++</span><h2 class="font-semibold flex-1">'+esc(c)+'</h2><button class="text-slate-500 hover:text-red-400 px-1" data-x="'+i+'">x</button></div><ul class="overflow-y-auto p-2 space-y-2" id="col-'+i+'"><li class="text-slate-500 text-sm px-1">-</li></ul>';
+m.appendChild(d);
+});
+m.querySelectorAll('[data-x]').forEach(b=>{b.onclick=()=>{cols.splice(+b.dataset.x,1);if(!cols.length)cols=['all'];save();render();search()}});
+m.querySelectorAll('section').forEach(s=>{
+s.ondragstart=e=>{e.dataTransfer.setData('text/plain',s.dataset.i);s.classList.add('dragging')};
+s.ondragend=()=>s.classList.remove('dragging');
+s.ondragover=e=>e.preventDefault();
+s.ondrop=e=>{e.preventDefault();const from=+e.dataTransfer.getData('text/plain');const to=+s.dataset.i;if(from===to)return;const mv=cols.splice(from,1);cols.splice(to,0,mv[0]);save();render();search()};
+});
+}
+function item(x){return '<li class="bg-slate-800/60 hover:bg-slate-800 rounded p-2"><a class="text-sky-400 hover:underline text-sm font-medium" href="'+esc(x.url)+'">'+esc(x.title)+'</a><p class="text-slate-400 text-xs mt-1">'+esc(x.snippet||'')+'</p><span class="text-slate-600 text-xs">['+esc(x.source)+']</span></li>'}
+async function search(){
+const qv=document.getElementById('q').value.trim();if(!qv)return;
+const res=await fetch('/search?limit=10&q='+encodeURIComponent(qv)+'&columns='+encodeURIComponent(cols.join(',')));
 const j=await res.json();
-let ad=j.sponsored?`<aside style="border:1px dashed #999;padding:.5rem;margin:.5rem 0"><small>Sponsored: ${j.sponsored.reason}</small><br><a href="${j.sponsored.url}">${j.sponsored.title}</a></aside>`:'';
-if(j.columns){const d=document.getElementById('cols');d.innerHTML=ad;
-for(const[k,v]of Object.entries(j.columns)){const s=document.createElement('div');
-s.innerHTML='<h3>'+k+'</h3><ul>'+v.map(x=>`<li><a href="${x.url}">${x.title}</a><br>${x.snippet||''}</li>`).join('')+'</ul>';d.appendChild(s);}
-document.getElementById('r').innerHTML='';}else{document.getElementById('cols').innerHTML=ad;
-r.innerHTML=j.results.map(x=>`<li><a href="${x.url}">${x.title}</a><br>${x.snippet||''} <span class=src>[${x.source}]</span></li>`).join('')}};</script>
+document.getElementById('ad').innerHTML=j.sponsored?'<aside class="border border-dashed border-slate-600 rounded p-2 text-xs text-slate-400">Sponsored: <a class="text-sky-400" href="'+esc(j.sponsored.url)+'">'+esc(j.sponsored.title)+'</a></aside>':'';
+cols.forEach((c,i)=>{
+const ul=document.getElementById('col-'+i);if(!ul)return;
+const rows=(j.columns&&j.columns[c])||[];
+ul.innerHTML=rows.length?rows.map(item).join(''):'<li class="text-slate-600 text-sm px-1">nema rezultata</li>';
+});
+}
+document.getElementById('f').onsubmit=e=>{e.preventDefault();search()};
+document.getElementById('add').onclick=()=>{const v=document.getElementById('src').value;if(!cols.includes(v)){cols.push(v);save();render();search()}};
+render();
+</script>
 </body></html>"#;
 
 async fn index() -> Html<&'static str> {
